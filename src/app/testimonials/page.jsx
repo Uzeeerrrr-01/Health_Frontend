@@ -132,7 +132,7 @@ export default function TestimonialsPage() {
                 </Button>
               </Link>
               <Link href="/auth/login">
-                <Button size="lg" variant="outline" className="border-white text-white hover:bg-white/10 w-full sm:w-auto">
+                <Button size="lg" variant="outline" className="border-white text-white bg-transparent hover:bg-white hover:text-teal-600 w-full sm:w-auto">
                   Existing User? Log In
                 </Button>
               </Link>
