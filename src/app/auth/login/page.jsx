@@ -21,11 +21,36 @@ function LoginContent() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
 
-  const handleDemoLogin = (selectedRole) => {
-    // Demo mode: we should probably call a backend mock login or just skip. 
-    // Since we need to replace mock behavior with real, let's keep it but ideally they should use real credentials.
-    // For now we navigate to the dashboard but without token it might bounce back if protected.
-    router.push(`/${selectedRole}/dashboard`)
+  const handleDemoLogin = async (selectedRole) => {
+    setLoading(true)
+    setError("")
+    try {
+      const demoCredentials = {
+        patient: { email: 'patient@example.com', password: 'password123', role: 'patient' },
+        doctor: { email: 'doctor@example.com', password: 'password123', role: 'doctor' },
+        admin: { email: 'admin@example.com', password: 'password123', adminAccessCode: 'super', role: 'admin' }
+      }
+
+      const credentials = demoCredentials[selectedRole]
+      console.log('Demo Login - Selected Role:', selectedRole)
+      
+      const response = await api.post('/auth/login', credentials)
+      
+      if (response.data.success) {
+        const { token, role: userRole } = response.data
+        
+        localStorage.setItem('token', token)
+        localStorage.setItem('role', userRole)
+        localStorage.setItem('user', JSON.stringify(response.data))
+        
+        router.push(`/${userRole}/dashboard`)
+      }
+    } catch (err) {
+      console.error("Demo login failed:", err)
+      setError("Demo accounts are currently unavailable. Please register a new account.")
+    } finally {
+      setLoading(false)
+    }
   }
 
   const handleLogin = async (e) => {
@@ -34,12 +59,15 @@ function LoginContent() {
     setError("")
 
     try {
-      const payload = { email, password }
+      const payload = { email, password, role }
+      console.log('Login Payload being sent:', payload)
+      
       if (role === "admin") {
         payload.adminAccessCode = adminAccessCode
       }
 
       const response = await api.post('/auth/login', payload)
+      console.log('Login Response received:', response.data)
       
       if (response.data.success) {
         const { token, role: userRole, verificationStatus } = response.data
@@ -48,21 +76,20 @@ function LoginContent() {
         localStorage.setItem('role', userRole)
         localStorage.setItem('user', JSON.stringify(response.data))
 
-        // Check if role matches what they selected, just for UX (or rely on backend role)
         // Redirect based on role returned from backend
         if (userRole === "doctor" && verificationStatus !== "approved") {
-           // If doctor is pending or rejected, redirect to a status page or show error
-           router.push('/auth/register?role=doctor&status=' + verificationStatus) // redirecting back to register with status to see the state
+           router.push('/auth/register?role=doctor&status=' + verificationStatus)
         } else {
            router.push(`/${userRole}/dashboard`)
         }
       }
     } catch (err) {
-      setError(err.message || "Failed to login. Please check your credentials.")
+      setError(err.response?.data?.message || err.message || "Failed to login. Please check your credentials.")
     } finally {
       setLoading(false)
     }
   }
+
 
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">

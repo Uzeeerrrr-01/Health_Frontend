@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/Button"
 import { Badge } from "@/components/ui/Badge"
 import { Input, Label } from "@/components/ui/Input"
 import { Modal } from "@/components/ui/Modal"
-import { Calendar as CalendarIcon, Clock, Video, MapPin, Search, Plus, Filter } from "lucide-react"
+import { Calendar as CalendarIcon, Clock, Video, MapPin, Search, Plus, Filter, XCircle } from "lucide-react"
 import api from "@/lib/api"
 
 export default function AppointmentsPage() {
@@ -14,6 +14,7 @@ export default function AppointmentsPage() {
   const [appointments, setAppointments] = useState([])
   const [doctors, setDoctors] = useState([])
   const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState("")
   const [isBookingModalOpen, setIsBookingModalOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
   
@@ -26,14 +27,29 @@ export default function AppointmentsPage() {
   })
 
   const fetchAppointments = async () => {
+    const token = localStorage.getItem('token');
+    const role = localStorage.getItem('role');
+    
+    if (!token) {
+      setError("Please login to view appointments");
+      return;
+    }
+
+    if (role !== 'patient') {
+      setError("Access denied. This page is for patients only.");
+      return;
+    }
     try {
       setIsLoading(true)
+      setError("")
       const res = await api.get('/appointments/patient')
       if (res.data.success) {
         setAppointments(res.data.data)
       }
     } catch (err) {
-      console.error("Failed to fetch appointments:", err)
+      console.error("Appointment fetch error:", err.response?.data || err.message || err)
+      const errorMsg = err.response?.data?.message || err.message || "Failed to load appointments."
+      setError(errorMsg)
     } finally {
       setIsLoading(false)
     }
@@ -58,7 +74,14 @@ export default function AppointmentsPage() {
   const handleBookAppointment = async (e) => {
     e.preventDefault()
     try {
-      await api.post('/appointments', formData)
+      // Map consultationType to backend enum
+      const payload = {
+        ...formData,
+        consultationType: formData.consultationType === "video" ? "online" : "offline",
+        reason: formData.reason || "General Consultation" // Ensure reason is not empty
+      }
+      
+      await api.post('/appointments', payload)
       fetchAppointments()
       setIsBookingModalOpen(false)
       setFormData({
@@ -67,7 +90,7 @@ export default function AppointmentsPage() {
       alert("Appointment booked successfully!")
     } catch (err) {
       console.error("Failed to book appointment", err)
-      alert("Failed to book appointment")
+      alert(err.message || "Failed to book appointment")
     }
   }
 
@@ -83,7 +106,7 @@ export default function AppointmentsPage() {
   }
 
   const filteredAppointments = appointments.filter(apt => {
-    const isUpcoming = apt.status === 'scheduled' || apt.status === 'pending';
+    const isUpcoming = apt.status === 'scheduled' || apt.status === 'pending' || apt.status === 'confirmed';
     const isPast = apt.status === 'completed' || apt.status === 'cancelled';
     
     const matchesTab = activeTab === "upcoming" ? isUpcoming : isPast;
@@ -105,6 +128,13 @@ export default function AppointmentsPage() {
           <Plus className="h-4 w-4" /> Book Appointment
         </Button>
       </div>
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-lg flex items-center gap-3">
+          <AlertCircle className="h-5 w-5" />
+          <p>{error}</p>
+        </div>
+      )}
 
       {/* Tabs and Filters */}
       <div className="flex flex-col sm:flex-row gap-4 justify-between">
@@ -163,17 +193,23 @@ export default function AppointmentsPage() {
                     <div className="flex items-center gap-3 mb-2">
                       <h3 className="text-xl font-semibold text-slate-900">Dr. {apt.doctor?.fullName || 'Unknown'}</h3>
                       <Badge variant={
-                        apt.status === "scheduled" ? "teal" : 
+                        apt.status === "confirmed" ? "success" : 
                         apt.status === "pending" ? "warning" :
                         apt.status === "cancelled" ? "destructive" : "secondary"
                       }>
                         {apt.status.charAt(0).toUpperCase() + apt.status.slice(1)}
                       </Badge>
+                      {apt.updatedAt && new Date(apt.updatedAt) > new Date(apt.createdAt) && (
+                        <Badge variant="warning" className="text-xs">
+                          Updated by Doctor
+                        </Badge>
+                      )}
                     </div>
                     <p className="text-slate-600">{apt.doctor?.specialization}</p>
+                    {apt.reason && <p className="text-sm text-slate-500 mt-1">Reason: {apt.reason}</p>}
 
                     <div className="flex items-center gap-4 mt-4 text-sm text-slate-500">
-                      {apt.consultationType === "video" ? (
+                      {apt.consultationType === "online" ? (
                         <span className="flex items-center gap-1.5 bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-md font-medium">
                           <Video className="h-4 w-4" /> Video Consultation
                         </span>
@@ -186,9 +222,9 @@ export default function AppointmentsPage() {
                   </div>
 
                   <div className="flex flex-col sm:items-end gap-3 sm:pl-6 sm:border-l border-slate-100">
-                    {(apt.status === "scheduled" || apt.status === "pending") ? (
+                    {(apt.status === "confirmed" || apt.status === "pending") ? (
                       <>
-                        {apt.consultationType === "video" && (
+                        {apt.consultationType === "online" && (
                           <Button className="w-full sm:w-auto">Join Call</Button>
                         )}
                         <Button variant="outline" onClick={() => handleCancelAppointment(apt._id)} className="w-full sm:w-auto text-red-600 hover:text-red-700 hover:bg-red-50">Cancel</Button>
@@ -277,6 +313,7 @@ export default function AppointmentsPage() {
               placeholder="e.g. Regular checkup, Headache..."
               value={formData.reason}
               onChange={(e) => setFormData({...formData, reason: e.target.value})}
+              required
             />
           </div>
           <div className="pt-4 flex justify-end gap-2">

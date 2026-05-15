@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, Suspense } from "react"
+import { useState, useEffect, Suspense } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/Button"
@@ -21,7 +21,7 @@ function RegisterContent() {
   const [error, setError] = useState("")
 
   const [formData, setFormData] = useState({
-    firstName: "", lastName: "", email: "", password: "",
+    firstName: "", lastName: "", email: "", password: "", phone: "",
     age: "", sex: "", bloodGroup: "", allergies: "", medications: "", history: "", familyHistory: "", emergency: "",
     specialization: "", experience: "", license: "", clinic: "", clinicAddress: ""
   })
@@ -32,6 +32,13 @@ function RegisterContent() {
 
   const isPatient = role === "patient"
   const isDoctor = role === "doctor"
+
+  // Fix React warning: Move navigation side-effect to useEffect
+  useEffect(() => {
+    if (role === "admin") {
+      router.push("/auth/login?role=admin")
+    }
+  }, [role, router])
 
   const handleChange = (e) => setFormData({ ...formData, [e.target.id]: e.target.value })
   
@@ -53,6 +60,7 @@ function RegisterContent() {
         payload.append('fullName', fullName)
         payload.append('email', formData.email)
         payload.append('password', formData.password)
+        payload.append('phone', formData.phone) // Added phone
         payload.append('specialization', formData.specialization)
         payload.append('yearsOfExperience', formData.experience)
         payload.append('licenseNumber', formData.license)
@@ -62,14 +70,21 @@ function RegisterContent() {
         if (files.governmentId) payload.append('governmentId', files.governmentId)
         if (files.degreeCertificate) payload.append('degreeCertificate', files.degreeCertificate)
         if (files.medicalLicenseProof) payload.append('medicalLicenseProof', files.medicalLicenseProof)
+        if (files.profilePhoto) payload.append('profilePhoto', files.profilePhoto) // Added profilePhoto
         
         const res = await api.post('/auth/doctor/register', payload, {
           headers: { 'Content-Type': 'multipart/form-data' }
         })
         
+        console.log('Doctor Registration Response:', res.data)
+        
         if (res.data.success) {
+          console.log('Doctor registered successfully, verification status:', res.data.verificationStatus)
           setIsSubmitted(true)
           setVerificationStatus(res.data.verificationStatus || "Pending")
+          
+          // DO NOT log in doctor automatically - they need admin approval
+          // DO NOT store token or redirect to dashboard
         }
       } else {
         const payload = {
@@ -88,11 +103,18 @@ function RegisterContent() {
         
         const res = await api.post('/auth/register', payload)
         
+        console.log('Patient Registration Response:', res.data)
+        
         if (res.data.success) {
+          console.log('Patient registered, role:', res.data.role)
           localStorage.setItem('token', res.data.token)
           localStorage.setItem('role', res.data.role)
           localStorage.setItem('user', JSON.stringify(res.data))
-          router.push(`/${role}/dashboard`)
+          
+          console.log('Stored role in localStorage:', localStorage.getItem('role'))
+          console.log('Redirecting to:', `/${res.data.role}/dashboard`)
+          
+          router.push(`/${res.data.role}/dashboard`)
         }
       }
     } catch (err) {
@@ -100,11 +122,8 @@ function RegisterContent() {
     }
   }
 
+  // Prevent rendering if role is admin (will be redirected by useEffect)
   if (role === "admin") {
-    // Admins can't register here
-    if (typeof window !== 'undefined') {
-      router.push("/auth/login?role=admin")
-    }
     return null;
   }
 
@@ -145,7 +164,7 @@ function RegisterContent() {
 
               {(verificationStatus === "pending" || verificationStatus === "Pending") && (
                 <p className="text-slate-600 text-sm mb-8">
-                  Your profile is under admin review.
+                  Your profile is under admin review. Once verified, you will receive an email and gain access to your dashboard.
                 </p>
               )}
 
@@ -320,9 +339,15 @@ function RegisterContent() {
                       </div>
                     </div>
 
-                    <div className="space-y-2">
-                      <Label htmlFor="license">Medical License Number <span className="text-red-500">*</span></Label>
-                      <Input id="license" value={formData.license} onChange={handleChange} required placeholder="Enter your registration/license number" />
+                    <div className="grid sm:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="license">Medical License Number <span className="text-red-500">*</span></Label>
+                        <Input id="license" value={formData.license} onChange={handleChange} required placeholder="License number" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="phone">Phone Number <span className="text-red-500">*</span></Label>
+                        <Input id="phone" value={formData.phone} onChange={handleChange} required placeholder="e.g. +1 (555) 000-0000" />
+                      </div>
                     </div>
                   </div>
 
@@ -340,7 +365,7 @@ function RegisterContent() {
 
                     <div className="space-y-2">
                       <Label htmlFor="clinicAddress">Clinic Address <span className="text-red-500">*</span></Label>
-                      <Input id="clinicAddress" value={formData.clinicAddress} onChange={handleChange} required placeholder="Full address including city and zip code" />
+                      <Input id="clinicAddress" value={formData.clinicAddress} onChange={handleChange} required placeholder="Full address" />
                     </div>
                   </div>
 

@@ -4,7 +4,7 @@ import { useState } from "react"
 import { ChatWindow } from "@/components/shared/ChatWindow"
 import { Button } from "@/components/ui/Button"
 import { Card, CardContent } from "@/components/ui/Card"
-import { Activity, Plus, FileText, AlertCircle, Stethoscope, ChevronRight } from "lucide-react"
+import { Activity, Plus, AlertCircle, Stethoscope, ChevronRight } from "lucide-react"
 import Link from "next/link"
 import api from "@/lib/api"
 
@@ -20,8 +20,12 @@ export default function SymptomChecker() {
   const [isTyping, setIsTyping] = useState(false)
   const [showAnalysis, setShowAnalysis] = useState(false)
   const [analysisData, setAnalysisData] = useState(null)
+  const [error, setError] = useState("")
 
   const handleSendMessage = async (content) => {
+    // Clear previous error
+    setError("")
+    
     // Add user message
     const newMessages = [...messages, { sender: "user", content }]
     setMessages(newMessages)
@@ -59,29 +63,12 @@ export default function SymptomChecker() {
         throw new Error("Invalid AI response")
       }
     } catch (error) {
-      console.error("AI check failed, using fallback:", error)
-      // Fallback for demo purposes if backend fails / no API key
-      setTimeout(() => {
-        if (newMessages.length === 2) {
-          setMessages(prev => [...prev, {
-            sender: "ai",
-            content: "I understand. How long have you been experiencing this, and is the pain/discomfort constant or does it come and go?",
-            options: ["Started today", "For a few days", "More than a week"]
-          }])
-        } else {
-          setMessages(prev => [...prev, {
-            sender: "ai",
-            content: "Thank you for the details. Based on your symptoms, I've generated an initial assessment. Please review the panel on the right.",
-          }])
-          setAnalysisData({
-            possibleCondition: "Viral Pharyngitis / Common Cold",
-            riskLevel: "Medium",
-            preventionAdvice: "Rest and stay hydrated. Over-the-counter pain relievers may help. Monitor symptoms.",
-            recommendedSpecialization: "General Physician"
-          })
-          setShowAnalysis(true)
-        }
-      }, 1000)
+      console.error("AI check failed:", error)
+      setError("I'm having trouble connecting to the medical brain right now. Please try again or consult a doctor if it's urgent.")
+      setMessages(prev => [...prev, {
+        sender: "ai",
+        content: "I apologize, but I encountered an error while analyzing your symptoms. Please check your connection or try again later.",
+      }])
     } finally {
       setIsTyping(false)
     }
@@ -91,12 +78,19 @@ export default function SymptomChecker() {
     setMessages(initialMessages)
     setShowAnalysis(false)
     setAnalysisData(null)
+    setError("")
   }
 
   return (
     <div className="h-[calc(100vh-8rem)] flex flex-col md:flex-row gap-6">
       {/* Main Chat Area */}
       <div className={`flex flex-col h-full transition-all duration-300 ${showAnalysis ? 'w-full md:w-7/12 lg:w-8/12' : 'w-full'}`}>
+        {error && (
+          <div className="mb-4 p-3 bg-red-50 text-red-700 text-sm rounded-md border border-red-200 flex items-center gap-2">
+            <AlertCircle className="h-4 w-4" />
+            {error}
+          </div>
+        )}
         <ChatWindow 
           title="AI Symptom Checker"
           subtitle="Get an initial assessment based on your symptoms"

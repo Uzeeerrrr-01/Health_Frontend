@@ -46,7 +46,7 @@ api.interceptors.response.use(
           }
         }
       }
-      return Promise.reject(error.response.data || new Error(error.response.statusText));
+      return Promise.reject(error.response?.data || new Error(error.response?.statusText || 'Network Error'));
     } else if (error.request) {
       // The request was made but no response was received
       return Promise.reject(new Error('No response from server. Please check your connection.'));

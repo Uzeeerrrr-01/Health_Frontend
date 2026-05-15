@@ -1,23 +1,18 @@
 "use client"
 
-import React, { useState, useMemo } from "react"
+import React, { useState, useEffect, useMemo } from "react"
 import { Card, CardContent } from "@/components/ui/Card"
 import { Button } from "@/components/ui/Button"
 import { Input, Label } from "@/components/ui/Input"
 import { Badge } from "@/components/ui/Badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/Table"
 import { Modal } from "@/components/ui/Modal"
-import { Search, Plus, Edit2, Trash2, Filter, Calendar } from "lucide-react"
-
-const INITIAL_APPOINTMENTS = [
-  { id: 1, doctor: "Dr. Sarah Jenkins", patient: "John Doe", date: "2026-05-15", time: "10:00 AM", status: "Confirmed", type: "Checkup" },
-  { id: 2, doctor: "Dr. Michael Chen", patient: "Alice Smith", date: "2026-05-16", time: "02:30 PM", status: "Pending", type: "Consultation" },
-  { id: 3, doctor: "Dr. Emily Rodriguez", patient: "Bob Johnson", date: "2026-05-15", time: "11:15 AM", status: "Cancelled", type: "Follow-up" },
-  { id: 4, doctor: "Dr. Sarah Jenkins", patient: "Carol Williams", date: "2026-05-14", time: "09:00 AM", status: "Completed", type: "Checkup" },
-]
+import { Search, Edit2, Trash2, Filter, Calendar } from "lucide-react"
+import api from "@/lib/api"
 
 export default function AdminAppointments() {
-  const [appointments, setAppointments] = useState(INITIAL_APPOINTMENTS)
+  const [appointments, setAppointments] = useState([])
+  const [isLoading, setIsLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState("All")
   
@@ -28,27 +23,46 @@ export default function AdminAppointments() {
   
   // Form State
   const [formData, setFormData] = useState({
-    doctor: "", patient: "", date: "", time: "", status: "Pending", type: ""
+    date: "", time: "", status: "pending", reason: ""
   })
+
+  const fetchAppointments = async () => {
+    try {
+      setIsLoading(true)
+      const res = await api.get('/admin/appointments')
+      if (res.data.success) {
+        setAppointments(res.data.data)
+      }
+    } catch (err) {
+      console.error("Failed to fetch appointments:", err)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchAppointments()
+  }, [])
 
   const filteredAppointments = useMemo(() => {
     return appointments.filter(appt => {
+      const doctorName = appt.doctor?.fullName || "";
+      const patientName = appt.patient?.fullName || "";
       const matchesSearch = 
-        appt.doctor.toLowerCase().includes(searchQuery.toLowerCase()) || 
-        appt.patient.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesStatus = statusFilter === "All" || appt.status === statusFilter;
+        doctorName.toLowerCase().includes(searchQuery.toLowerCase()) || 
+        patientName.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesStatus = statusFilter === "All" || appt.status.toLowerCase() === statusFilter.toLowerCase();
       return matchesSearch && matchesStatus;
     });
   }, [appointments, searchQuery, statusFilter]);
 
-  const handleOpenAdd = () => {
-    setFormData({ doctor: "", patient: "", date: "", time: "", status: "Pending", type: "" })
-    setSelectedAppointment(null)
-    setIsFormModalOpen(true)
-  }
-
   const handleOpenEdit = (appt) => {
-    setFormData(appt)
+    setFormData({
+      date: new Date(appt.date).toISOString().split('T')[0],
+      time: appt.time,
+      status: appt.status,
+      reason: appt.reason
+    })
     setSelectedAppointment(appt)
     setIsFormModalOpen(true)
   }
@@ -58,27 +72,36 @@ export default function AdminAppointments() {
     setIsDeleteModalOpen(true)
   }
 
-  const handleSaveAppointment = (e) => {
+  const handleSaveAppointment = async (e) => {
     e.preventDefault()
-    if (selectedAppointment) {
-      setAppointments(appointments.map(a => a.id === selectedAppointment.id ? { ...formData, id: selectedAppointment.id } : a))
-    } else {
-      setAppointments([...appointments, { ...formData, id: Date.now() }])
+    try {
+      await api.put(`/appointments/${selectedAppointment._id}`, formData)
+      fetchAppointments()
+      setIsFormModalOpen(false)
+      alert("Appointment updated successfully.")
+    } catch (err) {
+      alert("Failed to update appointment")
     }
-    setIsFormModalOpen(false)
   }
 
-  const handleDeleteAppointment = () => {
-    setAppointments(appointments.filter(a => a.id !== selectedAppointment.id))
-    setIsDeleteModalOpen(false)
+  const handleDeleteAppointment = async () => {
+    try {
+      await api.delete(`/appointments/${selectedAppointment._id}`)
+      fetchAppointments()
+      setIsDeleteModalOpen(false)
+      alert("Appointment deleted/cancelled successfully.")
+    } catch (err) {
+      alert("Failed to delete appointment")
+    }
   }
 
   const getStatusBadgeVariant = (status) => {
-    switch (status) {
-      case "Confirmed": return "teal";
-      case "Pending": return "warning";
-      case "Completed": return "success";
-      case "Cancelled": return "destructive";
+    switch (status.toLowerCase()) {
+      case "confirmed": return "teal";
+      case "scheduled": return "teal";
+      case "pending": return "warning";
+      case "completed": return "success";
+      case "cancelled": return "destructive";
       default: return "default";
     }
   }
@@ -90,9 +113,6 @@ export default function AdminAppointments() {
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">Appointments</h1>
           <p className="text-slate-500">Platform-wide appointment monitoring.</p>
         </div>
-        <Button onClick={handleOpenAdd} className="flex items-center gap-2">
-          <Plus className="w-4 h-4" /> Add Appointment
-        </Button>
       </div>
 
       <Card>
@@ -135,7 +155,11 @@ export default function AdminAppointments() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredAppointments.length === 0 ? (
+              {isLoading ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center py-8">Loading...</TableCell>
+                </TableRow>
+              ) : filteredAppointments.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={6} className="text-center py-8 text-slate-500">
                     No appointments found.
@@ -143,16 +167,16 @@ export default function AdminAppointments() {
                 </TableRow>
               ) : (
                 filteredAppointments.map(appt => (
-                  <TableRow key={appt.id}>
-                    <TableCell className="font-medium text-slate-900">{appt.patient}</TableCell>
-                    <TableCell>{appt.doctor}</TableCell>
+                  <TableRow key={appt._id}>
+                    <TableCell className="font-medium text-slate-900">{appt.patient?.fullName}</TableCell>
+                    <TableCell>{appt.doctor?.fullName}</TableCell>
                     <TableCell>
                       <div className="flex flex-col">
-                        <span className="text-sm font-medium">{appt.date}</span>
+                        <span className="text-sm font-medium">{new Date(appt.date).toLocaleDateString()}</span>
                         <span className="text-xs text-slate-500">{appt.time}</span>
                       </div>
                     </TableCell>
-                    <TableCell>{appt.type}</TableCell>
+                    <TableCell className="capitalize">{appt.consultationType}</TableCell>
                     <TableCell>
                       <Badge variant={getStatusBadgeVariant(appt.status)}>{appt.status}</Badge>
                     </TableCell>
@@ -174,22 +198,14 @@ export default function AdminAppointments() {
         </CardContent>
       </Card>
 
-      {/* Add/Edit Modal */}
+      {/* Edit Modal */}
       <Modal 
         isOpen={isFormModalOpen} 
         onClose={() => setIsFormModalOpen(false)} 
-        title={selectedAppointment ? "Edit Appointment" : "Add New Appointment"}
+        title="Edit Appointment"
       >
         <form onSubmit={handleSaveAppointment} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="patient">Patient Name</Label>
-              <Input id="patient" value={formData.patient} onChange={e => setFormData({...formData, patient: e.target.value})} required />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="doctor">Doctor Name</Label>
-              <Input id="doctor" value={formData.doctor} onChange={e => setFormData({...formData, doctor: e.target.value})} required />
-            </div>
             <div className="space-y-2">
               <Label htmlFor="date">Date</Label>
               <Input id="date" type="date" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} required />
@@ -198,11 +214,7 @@ export default function AdminAppointments() {
               <Label htmlFor="time">Time</Label>
               <Input id="time" type="time" value={formData.time} onChange={e => setFormData({...formData, time: e.target.value})} required />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="type">Type</Label>
-              <Input id="type" placeholder="e.g., Checkup, Consultation" value={formData.type} onChange={e => setFormData({...formData, type: e.target.value})} required />
-            </div>
-            <div className="space-y-2">
+            <div className="space-y-2 col-span-2">
               <Label htmlFor="status">Status</Label>
               <select 
                 id="status"
@@ -210,11 +222,15 @@ export default function AdminAppointments() {
                 value={formData.status}
                 onChange={e => setFormData({...formData, status: e.target.value})}
               >
-                <option value="Confirmed">Confirmed</option>
-                <option value="Pending">Pending</option>
-                <option value="Completed">Completed</option>
-                <option value="Cancelled">Cancelled</option>
+                <option value="pending">Pending</option>
+                <option value="confirmed">Confirmed</option>
+                <option value="completed">Completed</option>
+                <option value="cancelled">Cancelled</option>
               </select>
+            </div>
+            <div className="space-y-2 col-span-2">
+              <Label htmlFor="reason">Reason / Notes</Label>
+              <Input id="reason" value={formData.reason} onChange={e => setFormData({...formData, reason: e.target.value})} required />
             </div>
           </div>
           <div className="pt-4 flex justify-end gap-2 border-t border-slate-100">
@@ -227,10 +243,10 @@ export default function AdminAppointments() {
       {/* Delete/Cancel Confirmation Modal */}
       <Modal isOpen={isDeleteModalOpen} onClose={() => setIsDeleteModalOpen(false)} title="Cancel Appointment">
         <div className="space-y-4">
-          <p className="text-slate-600">Are you sure you want to cancel the appointment for <span className="font-semibold text-slate-900">{selectedAppointment?.patient}</span> with <span className="font-semibold text-slate-900">{selectedAppointment?.doctor}</span>? This action cannot be undone.</p>
+          <p className="text-slate-600">Are you sure you want to cancel/delete the appointment for <span className="font-semibold text-slate-900">{selectedAppointment?.patient?.fullName}</span> with <span className="font-semibold text-slate-900">Dr. {selectedAppointment?.doctor?.fullName}</span>? This action will notify the patient if cancelled.</p>
           <div className="flex justify-end gap-2 pt-4">
             <Button variant="outline" onClick={() => setIsDeleteModalOpen(false)}>Keep Appointment</Button>
-            <Button variant="danger" onClick={handleDeleteAppointment}>Cancel Appointment</Button>
+            <Button variant="danger" className="bg-red-600 hover:bg-red-700 text-white" onClick={handleDeleteAppointment}>Cancel/Delete Appointment</Button>
           </div>
         </div>
       </Modal>

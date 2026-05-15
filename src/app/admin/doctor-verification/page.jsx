@@ -31,11 +31,45 @@ export default function DoctorVerification() {
 
   const handleVerify = async (doctorId, status) => {
     try {
-      await api.put(`/admin/doctors/${doctorId}/verify`, { status })
-      fetchPendingDoctors()
+      let rejectionReason = '';
+      
+      // If rejecting, ask for reason
+      if (status === 'rejected') {
+        rejectionReason = prompt('Please provide a reason for rejection:');
+        if (!rejectionReason) {
+          alert('Rejection reason is required.');
+          return;
+        }
+      }
+
+      // Confirm action
+      const confirmMessage = status === 'approved' 
+        ? 'Are you sure you want to approve this doctor? They will receive an email notification.'
+        : `Are you sure you want to reject this doctor?\nReason: ${rejectionReason}`;
+      
+      if (!confirm(confirmMessage)) {
+        return;
+      }
+
+      const payload = { status };
+      if (status === 'rejected') {
+        payload.rejectionReason = rejectionReason;
+      }
+
+      console.log('Verifying doctor:', doctorId, 'with payload:', payload);
+      const response = await api.put(`/admin/doctors/${doctorId}/verify`, payload);
+      console.log('Verification response:', response.data);
+      
+      alert(`Doctor ${status === 'approved' ? 'approved' : 'rejected'} successfully! Email notification sent.`);
+      fetchPendingDoctors();
     } catch (err) {
-      console.error(`Failed to ${status} doctor:`, err)
-      alert(`Failed to ${status} doctor.`)
+      console.error(`Failed to ${status} doctor:`, err);
+      console.error('Error response:', err.response);
+      console.error('Error data:', err.response?.data);
+      console.error('Error message:', err.message);
+      
+      const errorMessage = err.response?.data?.message || err.message || 'Unknown error occurred';
+      alert(`Failed to ${status} doctor: ${errorMessage}`);
     }
   }
 

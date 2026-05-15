@@ -6,7 +6,7 @@ import { StatCard } from "@/components/shared/StatCard"
 import { Badge } from "@/components/ui/Badge"
 import { Button } from "@/components/ui/Button"
 import { MOCK_APPOINTMENTS, MOCK_REMINDERS, MOCK_REPORTS } from "@/lib/mockData"
-import { HeartPulse, Activity, Weight, Calendar, Clock, AlertTriangle, ChevronRight, Bell } from "lucide-react"
+import { HeartPulse, Activity, Weight, Calendar, Clock, AlertTriangle, ChevronRight, Bell, XCircle, CalendarCheck } from "lucide-react"
 import Link from "next/link"
 import { FileText } from "lucide-react"
 import api from "@/lib/api"
@@ -16,6 +16,7 @@ export default function PatientDashboard() {
   const [appointments, setAppointments] = useState(MOCK_APPOINTMENTS)
   const [reminders, setReminders] = useState(MOCK_REMINDERS)
   const [reports, setReports] = useState(MOCK_REPORTS)
+  const [notifications, setNotifications] = useState([])
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
@@ -30,20 +31,24 @@ export default function PatientDashboard() {
           }
         }
 
-        const [apptsRes, remsRes, repsRes] = await Promise.allSettled([
+        const [apptsRes, remsRes, repsRes, notifsRes] = await Promise.allSettled([
           api.get('/appointments/patient'),
           api.get('/medicines/patient'),
-          api.get('/reports/patient')
+          api.get('/reports/patient'),
+          api.get('/notifications')
         ])
 
-        if (apptsRes.status === 'fulfilled' && apptsRes.value.data.data?.length > 0) {
+        if (apptsRes.status === 'fulfilled' && apptsRes.value.data.success) {
           setAppointments(apptsRes.value.data.data)
         }
-        if (remsRes.status === 'fulfilled' && remsRes.value.data.data?.length > 0) {
+        if (remsRes.status === 'fulfilled' && remsRes.value.data.success) {
           setReminders(remsRes.value.data.data)
         }
-        if (repsRes.status === 'fulfilled' && repsRes.value.data.data?.length > 0) {
+        if (repsRes.status === 'fulfilled' && repsRes.value.data.success) {
           setReports(repsRes.value.data.data)
+        }
+        if (notifsRes.status === 'fulfilled' && notifsRes.value.data.success) {
+          setNotifications(notifsRes.value.data.data)
         }
       } catch (error) {
         console.error("Failed to fetch dashboard data", error)
@@ -183,6 +188,55 @@ export default function PatientDashboard() {
                     </Badge>
                   </div>
                 ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <div>
+                <CardTitle>Recent Messages</CardTitle>
+                <CardDescription>Updates from your doctors and MediAI.</CardDescription>
+              </div>
+              <Link href="/patient/messages">
+                <Button variant="ghost" size="sm" className="gap-1 text-teal-600">
+                  View All <ChevronRight className="h-4 w-4" />
+                </Button>
+              </Link>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {notifications && notifications.slice(0, 3).length > 0 ? (
+                  notifications.slice(0, 3).map((notif) => (
+                    <Link 
+                      key={notif._id} 
+                      href={notif.type?.includes('appointment') ? '/patient/appointments' : '/patient/messages'}
+                      className={`block p-4 rounded-lg border transition-all hover:shadow-md ${notif.isRead ? 'bg-slate-50 border-slate-100' : 'bg-teal-50/50 border-teal-100'}`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className={`p-2 rounded-full ${
+                          notif.type === 'appointment_cancel' ? 'bg-red-100 text-red-600' : 
+                          notif.type === 'appointment_update' ? 'bg-amber-100 text-amber-600' : 
+                          'bg-teal-100 text-teal-600'
+                        }`}>
+                          {notif.type === 'appointment_cancel' ? <XCircle className="h-4 w-4" /> : 
+                           notif.type === 'appointment_update' ? <CalendarCheck className="h-4 w-4" /> : 
+                           <Bell className="h-4 w-4" />}
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-sm font-semibold text-slate-900">{notif.title}</p>
+                          <p className="text-xs text-slate-600 line-clamp-2">{notif.message}</p>
+                          <p className="text-[10px] text-slate-400 mt-1">{new Date(notif.createdAt).toLocaleString()}</p>
+                        </div>
+                        <ChevronRight className="h-4 w-4 text-slate-400 flex-shrink-0" />
+                      </div>
+                    </Link>
+                  ))
+                ) : (
+                  <div className="text-center py-6 border border-dashed rounded-lg">
+                    <p className="text-sm text-slate-500">No new messages</p>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>

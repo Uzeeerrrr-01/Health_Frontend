@@ -5,9 +5,11 @@ import { Bell, Search, User, LogOut } from "lucide-react"
 import { Input } from "@/components/ui/Input"
 import { MOCK_USER } from "@/lib/mockData"
 import Link from "next/link"
+import api from "@/lib/api"
 
 export function Topbar({ role }) {
   const [user, setUser] = useState(MOCK_USER[role] || { name: "User" })
+  const [unreadCount, setUnreadCount] = useState(0)
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -26,7 +28,27 @@ export function Topbar({ role }) {
         }
       }
     }
-  }, [])
+
+    // Fetch unread notifications count for patients
+    if (role === 'patient') {
+      fetchUnreadCount()
+      // Poll every 30 seconds for new notifications
+      const interval = setInterval(fetchUnreadCount, 30000)
+      return () => clearInterval(interval)
+    }
+  }, [role])
+
+  const fetchUnreadCount = async () => {
+    try {
+      const res = await api.get('/notifications')
+      if (res.data.success) {
+        const unread = res.data.data.filter(n => !n.isRead).length
+        setUnreadCount(unread)
+      }
+    } catch (err) {
+      // Silently fail - don't show errors for notification polling
+    }
+  }
 
   return (
     <header className="h-16 border-b border-slate-200 bg-white px-4 sm:px-8 flex items-center justify-between sticky top-0 z-30">
@@ -45,10 +67,17 @@ export function Topbar({ role }) {
       <div className="flex-1 sm:hidden ml-10"></div>
 
       <div className="flex items-center gap-4">
-        <button className="relative p-2 text-slate-400 hover:bg-slate-100 rounded-full transition-colors">
+        <Link 
+          href={role === 'patient' ? '/patient/notifications' : '#'} 
+          className="relative p-2 text-slate-400 hover:bg-slate-100 rounded-full transition-colors"
+        >
           <Bell className="h-5 w-5" />
-          <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-red-500 ring-2 ring-white" />
-        </button>
+          {unreadCount > 0 && (
+            <span className="absolute top-1 right-1 h-5 w-5 rounded-full bg-red-500 ring-2 ring-white flex items-center justify-center text-[10px] font-bold text-white">
+              {unreadCount > 9 ? '9+' : unreadCount}
+            </span>
+          )}
+        </Link>
 
         <div className="h-8 w-px bg-slate-200 mx-2 hidden sm:block" />
 
