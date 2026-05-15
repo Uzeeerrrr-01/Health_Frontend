@@ -1,3 +1,6 @@
+"use client"
+
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/Card"
 import { StatCard } from "@/components/shared/StatCard"
 import { Badge } from "@/components/ui/Badge"
@@ -6,16 +9,63 @@ import { MOCK_APPOINTMENTS, MOCK_REMINDERS, MOCK_REPORTS } from "@/lib/mockData"
 import { HeartPulse, Activity, Weight, Calendar, Clock, AlertTriangle, ChevronRight, Bell } from "lucide-react"
 import Link from "next/link"
 import { FileText } from "lucide-react"
+import api from "@/lib/api"
 
 export default function PatientDashboard() {
-  const upcomingAppointments = MOCK_APPOINTMENTS.filter(a => a.status === "Upcoming")
+  const [user, setUser] = useState({ firstName: "Demo", lastName: "Patient" })
+  const [appointments, setAppointments] = useState(MOCK_APPOINTMENTS)
+  const [reminders, setReminders] = useState(MOCK_REMINDERS)
+  const [reports, setReports] = useState(MOCK_REPORTS)
+  const [isLoading, setIsLoading] = useState(true)
+
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      try {
+        if (typeof window !== 'undefined') {
+          const storedUser = localStorage.getItem('user')
+          if (storedUser) {
+            const parsedUser = JSON.parse(storedUser)
+            if (parsedUser.user) setUser(parsedUser.user)
+            else setUser(parsedUser)
+          }
+        }
+
+        const [apptsRes, remsRes, repsRes] = await Promise.allSettled([
+          api.get('/appointments/patient'),
+          api.get('/medicines/patient'),
+          api.get('/reports/patient')
+        ])
+
+        if (apptsRes.status === 'fulfilled' && apptsRes.value.data.data?.length > 0) {
+          setAppointments(apptsRes.value.data.data)
+        }
+        if (remsRes.status === 'fulfilled' && remsRes.value.data.data?.length > 0) {
+          setReminders(remsRes.value.data.data)
+        }
+        if (repsRes.status === 'fulfilled' && repsRes.value.data.data?.length > 0) {
+          setReports(repsRes.value.data.data)
+        }
+      } catch (error) {
+        console.error("Failed to fetch dashboard data", error)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    fetchDashboardData()
+  }, [])
+
+  const upcomingAppointments = appointments.filter(a => a.status === "Upcoming" || a.status === "scheduled" || a.status === "Scheduled")
+
+  if (isLoading) {
+    return <div className="flex h-[50vh] items-center justify-center text-slate-500">Loading dashboard...</div>
+  }
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">Dashboard</h1>
-          <p className="text-slate-500">Welcome back, John! Here's your health overview.</p>
+          <p className="text-slate-500">Welcome back, {user.fullName || user.firstName || user.name || "Patient"}! Here's your health overview.</p>
         </div>
         <Link href="/patient/symptom-checker">
           <Button className="gap-2">
@@ -117,19 +167,19 @@ export default function PatientDashboard() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {MOCK_REPORTS.map((report) => (
-                  <div key={report.id} className="flex items-center justify-between p-4 border border-slate-100 rounded-lg bg-slate-50/50">
+                {reports.map((report) => (
+                  <div key={report.id || report._id} className="flex items-center justify-between p-4 border border-slate-100 rounded-lg bg-slate-50/50">
                     <div className="flex items-center gap-3">
                       <div className="p-2 bg-white rounded-md border border-slate-200">
                         <FileText className="h-5 w-5 text-teal-600" />
                       </div>
                       <div>
-                        <p className="font-medium text-slate-900">{report.title}</p>
-                        <p className="text-xs text-slate-500">{report.date} • {report.doctor}</p>
+                        <p className="font-medium text-slate-900">{report.title || report.testName || "Medical Report"}</p>
+                        <p className="text-xs text-slate-500">{report.date || (report.createdAt ? new Date(report.createdAt).toLocaleDateString() : "")} • {report.doctor?.fullName || report.doctor || "Doctor"}</p>
                       </div>
                     </div>
-                    <Badge variant={report.status === 'Approved' ? 'success' : 'warning'}>
-                      {report.status}
+                    <Badge variant={(report.status === 'Approved' || report.status === 'approved' || report.status === 'final') ? 'success' : 'warning'}>
+                      {report.status || "Draft"}
                     </Badge>
                   </div>
                 ))}
@@ -148,20 +198,20 @@ export default function PatientDashboard() {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {MOCK_REMINDERS.map((reminder) => (
-                  <div key={reminder.id} className="flex items-center justify-between py-2 border-b border-slate-100 last:border-0">
+                {reminders.map((reminder) => (
+                  <div key={reminder.id || reminder._id} className="flex items-center justify-between py-2 border-b border-slate-100 last:border-0">
                     <div className="flex items-center gap-3">
-                      <div className={`h-2 w-2 rounded-full ${reminder.status === 'taken' ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+                      <div className={`h-2 w-2 rounded-full ${(reminder.status === 'taken' || reminder.taken) ? 'bg-emerald-500' : 'bg-amber-500'}`} />
                       <div>
-                        <p className={`text-sm font-medium ${reminder.status === 'taken' ? 'text-slate-500 line-through' : 'text-slate-900'}`}>
-                          {reminder.medicine}
+                        <p className={`text-sm font-medium ${(reminder.status === 'taken' || reminder.taken) ? 'text-slate-500 line-through' : 'text-slate-900'}`}>
+                          {reminder.medicine || reminder.medicineName}
                         </p>
-                        <p className="text-xs text-slate-500">{reminder.type}</p>
+                        <p className="text-xs text-slate-500">{reminder.type || reminder.dosage}</p>
                       </div>
                     </div>
                     <div className="text-right">
                       <p className="text-sm font-medium text-slate-900">{reminder.time}</p>
-                      {reminder.status !== 'taken' && (
+                      {(reminder.status !== 'taken' && !reminder.taken) && (
                         <button className="text-xs text-teal-600 hover:underline mt-0.5">Mark Taken</button>
                       )}
                     </div>
@@ -181,13 +231,13 @@ export default function PatientDashboard() {
               <div className="space-y-4">
                 {upcomingAppointments.length > 0 ? (
                   upcomingAppointments.map((apt) => (
-                    <div key={apt.id} className="bg-teal-50 border border-teal-100 rounded-lg p-4">
+                    <div key={apt.id || apt._id} className="bg-teal-50 border border-teal-100 rounded-lg p-4">
                       <div className="flex items-start justify-between mb-2">
                         <div>
-                          <p className="font-semibold text-teal-900">{apt.doctorName}</p>
-                          <p className="text-sm text-teal-700">{apt.specialization}</p>
+                          <p className="font-semibold text-teal-900">{apt.doctorName || apt.doctor?.fullName || "Doctor"}</p>
+                          <p className="text-sm text-teal-700">{apt.specialization || apt.doctor?.specialization}</p>
                         </div>
-                        <Badge variant="teal">{apt.type}</Badge>
+                        <Badge variant="teal">{apt.type || apt.consultationType || "Consultation"}</Badge>
                       </div>
                       <div className="flex items-center gap-4 text-sm text-teal-800 mt-4 bg-white/60 p-2 rounded-md">
                         <div className="flex items-center gap-1">

@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useMemo } from "react"
+import React, { useState, useEffect, useMemo } from "react"
 import { Card, CardContent } from "@/components/ui/Card"
 import { Button } from "@/components/ui/Button"
 import { Input, Label } from "@/components/ui/Input"
@@ -8,16 +8,10 @@ import { Badge } from "@/components/ui/Badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/Table"
 import { Modal } from "@/components/ui/Modal"
 import { Search, Plus, Edit2, Trash2, Eye, Filter, Users, UserCheck, UserX, UserPlus } from "lucide-react"
-
-const INITIAL_USERS = [
-  { id: 1, name: "John Doe", email: "john@example.com", phone: "+1 555-0201", age: 34, sex: "Male", bloodGroup: "O+", allergies: "Peanuts", currentMedications: "None", previousHistory: "Asthma", familyHistory: "Diabetes", emergencyContact: "+1 555-0299", status: "Active", lastActive: "2026-05-14" },
-  { id: 2, name: "Alice Smith", email: "alice@example.com", phone: "+1 555-0202", age: 28, sex: "Female", bloodGroup: "A-", allergies: "None", currentMedications: "Iron supplements", previousHistory: "None", familyHistory: "None", emergencyContact: "+1 555-0298", status: "Pending", lastActive: "2026-05-13" },
-  { id: 3, name: "Bob Johnson", email: "bob@example.com", phone: "+1 555-0203", age: 45, sex: "Male", bloodGroup: "B+", allergies: "Penicillin", currentMedications: "Lisinopril", previousHistory: "Hypertension", familyHistory: "Heart Disease", emergencyContact: "+1 555-0297", status: "Suspended", lastActive: "2026-05-10" },
-  { id: 4, name: "Carol Williams", email: "carol@example.com", phone: "+1 555-0204", age: 52, sex: "Female", bloodGroup: "AB+", allergies: "Latex", currentMedications: "None", previousHistory: "None", familyHistory: "None", emergencyContact: "+1 555-0296", status: "Active", lastActive: "2026-05-14" },
-]
+import api from "@/lib/api"
 
 export default function AdminUsers() {
-  const [users, setUsers] = useState(INITIAL_USERS)
+  const [users, setUsers] = useState([])
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState("All")
   
@@ -28,34 +22,69 @@ export default function AdminUsers() {
   const [selectedUser, setSelectedUser] = useState(null)
   
   const [formData, setFormData] = useState({
-    name: "", email: "", phone: "", age: "", sex: "Male", bloodGroup: "", allergies: "", currentMedications: "", previousHistory: "", familyHistory: "", emergencyContact: "", status: "Active"
+    fullName: "", email: "", phone: "", age: "", sex: "Male", bloodGroup: "", allergies: "", currentMedications: "", previousDiseaseHistory: "", familyDiseaseHistory: "", emergencyContact: "", accountStatus: "active"
   })
+
+  const [isLoading, setIsLoading] = useState(true)
+
+  const fetchUsers = async () => {
+    try {
+      setIsLoading(true)
+      const res = await api.get('/admin/users')
+      if (res.data.success) {
+        setUsers(res.data.data)
+      }
+    } catch (error) {
+      console.error("Failed to fetch users:", error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchUsers()
+  }, [])
 
   const filteredUsers = useMemo(() => {
     return users.filter(user => {
-      const matchesSearch = 
-        user.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-        user.email.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesStatus = statusFilter === "All" || user.status === statusFilter;
+      const nameMatch = user.fullName ? user.fullName.toLowerCase().includes(searchQuery.toLowerCase()) : false;
+      const emailMatch = user.email ? user.email.toLowerCase().includes(searchQuery.toLowerCase()) : false;
+      const matchesSearch = nameMatch || emailMatch;
+      
+      const status = user.accountStatus === 'suspended' ? 'Suspended' : (user.isActive === false ? 'Pending' : 'Active');
+      const matchesStatus = statusFilter === "All" || status === statusFilter;
       return matchesSearch && matchesStatus;
     });
   }, [users, searchQuery, statusFilter]);
 
   const stats = {
     total: users.length,
-    active: users.filter(u => u.status === "Active").length,
-    suspended: users.filter(u => u.status === "Suspended").length,
-    newThisMonth: 2 // Mock data for demo
+    active: users.filter(u => u.accountStatus !== "suspended" && u.isActive !== false).length,
+    suspended: users.filter(u => u.accountStatus === "suspended").length,
+    newThisMonth: users.filter(u => new Date(u.createdAt) > new Date(new Date().setDate(1))).length
   }
 
   const handleOpenAdd = () => {
-    setFormData({ name: "", email: "", phone: "", age: "", sex: "Male", bloodGroup: "", allergies: "", currentMedications: "", previousHistory: "", familyHistory: "", emergencyContact: "", status: "Active" })
+    setFormData({ fullName: "", email: "", phone: "", age: "", sex: "Male", bloodGroup: "", allergies: "", currentMedications: "", previousDiseaseHistory: "", familyDiseaseHistory: "", emergencyContact: "", accountStatus: "active" })
     setSelectedUser(null)
     setIsFormModalOpen(true)
   }
 
   const handleOpenEdit = (user) => {
-    setFormData(user)
+    setFormData({
+      fullName: user.fullName || "",
+      email: user.email || "",
+      phone: user.phone || "",
+      age: user.age || "",
+      sex: user.sex || "Male",
+      bloodGroup: user.bloodGroup || "",
+      allergies: user.allergies || "",
+      currentMedications: user.currentMedications || "",
+      previousDiseaseHistory: user.previousDiseaseHistory || "",
+      familyDiseaseHistory: user.familyDiseaseHistory || "",
+      emergencyContact: user.emergencyContact || "",
+      accountStatus: user.accountStatus || "active"
+    })
     setSelectedUser(user)
     setIsFormModalOpen(true)
   }
@@ -70,34 +99,52 @@ export default function AdminUsers() {
     setIsDeleteModalOpen(true)
   }
 
-  const handleSaveUser = (e) => {
+  const handleSaveUser = async (e) => {
     e.preventDefault()
-    if (selectedUser) {
-      setUsers(users.map(u => u.id === selectedUser.id ? { ...formData, id: selectedUser.id, lastActive: selectedUser.lastActive } : u))
-    } else {
-      const today = new Date().toISOString().split('T')[0]
-      setUsers([...users, { ...formData, id: Date.now(), lastActive: today }])
+    try {
+      if (selectedUser) {
+        await api.put(`/admin/users/${selectedUser._id}`, formData)
+      } else {
+        await api.post('/admin/users', formData)
+      }
+      fetchUsers()
+      setIsFormModalOpen(false)
+    } catch (err) {
+      console.error("Failed to save user", err)
+      alert("Failed to save user. Please try again.")
     }
-    setIsFormModalOpen(false)
   }
 
-  const handleDeleteUser = () => {
-    setUsers(users.filter(u => u.id !== selectedUser.id))
-    setIsDeleteModalOpen(false)
-  }
-
-  const handleToggleStatus = (user) => {
-    const newStatus = user.status === "Active" ? "Suspended" : "Active"
-    setUsers(users.map(u => u.id === user.id ? { ...u, status: newStatus } : u))
-  }
-
-  const getStatusBadgeVariant = (status) => {
-    switch (status) {
-      case "Active": return "success";
-      case "Pending": return "warning";
-      case "Suspended": return "destructive";
-      default: return "default";
+  const handleDeleteUser = async () => {
+    try {
+      await api.delete(`/admin/users/${selectedUser._id}`)
+      fetchUsers()
+      setIsDeleteModalOpen(false)
+    } catch (err) {
+      console.error("Failed to delete user", err)
+      alert("Failed to delete user.")
     }
+  }
+
+  const handleToggleStatus = async (user) => {
+    try {
+      await api.put(`/admin/users/${user._id}/status`)
+      fetchUsers()
+    } catch (err) {
+      console.error("Failed to toggle status", err)
+    }
+  }
+
+  const getStatusBadgeVariant = (user) => {
+    if (user.accountStatus === 'suspended') return "destructive"
+    if (user.isActive === false) return "warning"
+    return "success"
+  }
+
+  const getStatusText = (user) => {
+    if (user.accountStatus === 'suspended') return "Suspended"
+    if (user.isActive === false) return "Pending"
+    return "Active"
   }
 
   return (
@@ -197,7 +244,13 @@ export default function AdminUsers() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredUsers.length === 0 ? (
+              {isLoading ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center py-8 text-slate-500">
+                    Loading users...
+                  </TableCell>
+                </TableRow>
+              ) : filteredUsers.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={5} className="text-center py-8 text-slate-500">
                     No users found.
@@ -205,9 +258,9 @@ export default function AdminUsers() {
                 </TableRow>
               ) : (
                 filteredUsers.map(user => (
-                  <TableRow key={user.id}>
+                  <TableRow key={user._id}>
                     <TableCell>
-                      <div className="font-medium text-slate-900">{user.name}</div>
+                      <div className="font-medium text-slate-900">{user.fullName}</div>
                       <div className="text-sm text-slate-500">{user.email}</div>
                     </TableCell>
                     <TableCell>
@@ -215,12 +268,12 @@ export default function AdminUsers() {
                       <div className="text-xs text-slate-500">Blood: {user.bloodGroup}</div>
                     </TableCell>
                     <TableCell>
-                      <div className="text-sm text-slate-900">{user.phone}</div>
+                      <div className="text-sm text-slate-900">{user.phone || 'N/A'}</div>
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-col items-start gap-1">
-                        <Badge variant={getStatusBadgeVariant(user.status)}>{user.status}</Badge>
-                        <span className="text-xs text-slate-500">Active: {user.lastActive}</span>
+                        <Badge variant={getStatusBadgeVariant(user)}>{getStatusText(user)}</Badge>
+                        <span className="text-xs text-slate-500">Joined: {new Date(user.createdAt).toLocaleDateString()}</span>
                       </div>
                     </TableCell>
                     <TableCell className="text-right">
@@ -231,8 +284,8 @@ export default function AdminUsers() {
                         <Button variant="ghost" size="icon" onClick={() => handleOpenEdit(user)} title="Edit">
                           <Edit2 className="w-4 h-4 text-blue-500" />
                         </Button>
-                        <Button variant="ghost" size="icon" onClick={() => handleToggleStatus(user)} title={user.status === "Active" ? "Suspend User" : "Activate User"}>
-                          {user.status === "Active" ? <UserX className="w-4 h-4 text-amber-500" /> : <UserCheck className="w-4 h-4 text-emerald-500" />}
+                        <Button variant="ghost" size="icon" onClick={() => handleToggleStatus(user)} title={user.accountStatus === "active" ? "Suspend User" : "Activate User"}>
+                          {user.accountStatus === "active" ? <UserX className="w-4 h-4 text-amber-500" /> : <UserCheck className="w-4 h-4 text-emerald-500" />}
                         </Button>
                         <Button variant="ghost" size="icon" onClick={() => handleOpenDelete(user)} title="Delete">
                           <Trash2 className="w-4 h-4 text-red-500" />
@@ -256,8 +309,8 @@ export default function AdminUsers() {
         <form onSubmit={handleSaveUser} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="name" className="text-slate-700">Full Name</Label>
-              <Input id="name" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} required className="text-slate-900" />
+              <Label htmlFor="fullName" className="text-slate-700">Full Name</Label>
+              <Input id="fullName" value={formData.fullName} onChange={e => setFormData({...formData, fullName: e.target.value})} required className="text-slate-900" />
             </div>
             <div className="space-y-2">
               <Label htmlFor="email" className="text-slate-700">Email</Label>
@@ -265,11 +318,11 @@ export default function AdminUsers() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="phone" className="text-slate-700">Phone</Label>
-              <Input id="phone" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} required className="text-slate-900" />
+              <Input id="phone" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} className="text-slate-900" />
             </div>
             <div className="space-y-2">
               <Label htmlFor="age" className="text-slate-700">Age</Label>
-              <Input id="age" type="number" value={formData.age} onChange={e => setFormData({...formData, age: e.target.value})} required className="text-slate-900" />
+              <Input id="age" type="number" value={formData.age} onChange={e => setFormData({...formData, age: e.target.value})} className="text-slate-900" />
             </div>
             <div className="space-y-2">
               <Label htmlFor="sex" className="text-slate-700">Sex</Label>
@@ -286,7 +339,7 @@ export default function AdminUsers() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="bloodGroup" className="text-slate-700">Blood Group</Label>
-              <Input id="bloodGroup" value={formData.bloodGroup} onChange={e => setFormData({...formData, bloodGroup: e.target.value})} required className="text-slate-900" />
+              <Input id="bloodGroup" value={formData.bloodGroup} onChange={e => setFormData({...formData, bloodGroup: e.target.value})} className="text-slate-900" />
             </div>
             <div className="space-y-2 sm:col-span-2">
               <Label htmlFor="allergies" className="text-slate-700">Allergies</Label>
@@ -297,28 +350,27 @@ export default function AdminUsers() {
               <Input id="currentMedications" value={formData.currentMedications} onChange={e => setFormData({...formData, currentMedications: e.target.value})} className="text-slate-900" />
             </div>
             <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="previousHistory" className="text-slate-700">Previous Disease History</Label>
-              <Input id="previousHistory" value={formData.previousHistory} onChange={e => setFormData({...formData, previousHistory: e.target.value})} className="text-slate-900" />
+              <Label htmlFor="previousDiseaseHistory" className="text-slate-700">Previous Disease History</Label>
+              <Input id="previousDiseaseHistory" value={formData.previousDiseaseHistory} onChange={e => setFormData({...formData, previousDiseaseHistory: e.target.value})} className="text-slate-900" />
             </div>
             <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="familyHistory" className="text-slate-700">Family Disease History</Label>
-              <Input id="familyHistory" value={formData.familyHistory} onChange={e => setFormData({...formData, familyHistory: e.target.value})} className="text-slate-900" />
+              <Label htmlFor="familyDiseaseHistory" className="text-slate-700">Family Disease History</Label>
+              <Input id="familyDiseaseHistory" value={formData.familyDiseaseHistory} onChange={e => setFormData({...formData, familyDiseaseHistory: e.target.value})} className="text-slate-900" />
             </div>
             <div className="space-y-2">
               <Label htmlFor="emergencyContact" className="text-slate-700">Emergency Contact</Label>
-              <Input id="emergencyContact" value={formData.emergencyContact} onChange={e => setFormData({...formData, emergencyContact: e.target.value})} required className="text-slate-900" />
+              <Input id="emergencyContact" value={formData.emergencyContact} onChange={e => setFormData({...formData, emergencyContact: e.target.value})} className="text-slate-900" />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="status" className="text-slate-700">Status</Label>
+              <Label htmlFor="accountStatus" className="text-slate-700">Status</Label>
               <select 
-                id="status"
+                id="accountStatus"
                 className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600"
-                value={formData.status}
-                onChange={e => setFormData({...formData, status: e.target.value})}
+                value={formData.accountStatus}
+                onChange={e => setFormData({...formData, accountStatus: e.target.value})}
               >
-                <option value="Active">Active</option>
-                <option value="Pending">Pending</option>
-                <option value="Suspended">Suspended</option>
+                <option value="active">Active</option>
+                <option value="suspended">Suspended</option>
               </select>
             </div>
           </div>
@@ -332,7 +384,7 @@ export default function AdminUsers() {
       {/* Delete Confirmation Modal */}
       <Modal isOpen={isDeleteModalOpen} onClose={() => setIsDeleteModalOpen(false)} title="Confirm Deletion">
         <div className="space-y-4">
-          <p className="text-slate-600">Are you sure you want to delete user <span className="font-semibold text-slate-900">{selectedUser?.name}</span>? This action cannot be undone.</p>
+          <p className="text-slate-600">Are you sure you want to delete user <span className="font-semibold text-slate-900">{selectedUser?.fullName}</span>? This action cannot be undone.</p>
           <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
             <Button variant="outline" onClick={() => setIsDeleteModalOpen(false)}>Cancel</Button>
             <Button variant="danger" onClick={handleDeleteUser}>Delete User</Button>
@@ -347,11 +399,11 @@ export default function AdminUsers() {
             <div className="grid grid-cols-2 gap-y-4 gap-x-6 text-sm">
               <div>
                 <p className="text-slate-500 mb-1">Full Name</p>
-                <p className="font-medium text-slate-900">{selectedUser.name}</p>
+                <p className="font-medium text-slate-900">{selectedUser.fullName}</p>
               </div>
               <div>
                 <p className="text-slate-500 mb-1">Status</p>
-                <Badge variant={getStatusBadgeVariant(selectedUser.status)}>{selectedUser.status}</Badge>
+                <Badge variant={getStatusBadgeVariant(selectedUser)}>{getStatusText(selectedUser)}</Badge>
               </div>
               <div>
                 <p className="text-slate-500 mb-1">Email</p>
@@ -359,15 +411,15 @@ export default function AdminUsers() {
               </div>
               <div>
                 <p className="text-slate-500 mb-1">Phone</p>
-                <p className="font-medium text-slate-900">{selectedUser.phone}</p>
+                <p className="font-medium text-slate-900">{selectedUser.phone || 'N/A'}</p>
               </div>
               <div>
                 <p className="text-slate-500 mb-1">Age & Sex</p>
-                <p className="font-medium text-slate-900">{selectedUser.age} years, {selectedUser.sex}</p>
+                <p className="font-medium text-slate-900">{selectedUser.age || 'N/A'} years, {selectedUser.sex || 'N/A'}</p>
               </div>
               <div>
                 <p className="text-slate-500 mb-1">Blood Group</p>
-                <p className="font-medium text-slate-900">{selectedUser.bloodGroup}</p>
+                <p className="font-medium text-slate-900">{selectedUser.bloodGroup || 'N/A'}</p>
               </div>
             </div>
             
@@ -384,15 +436,15 @@ export default function AdminUsers() {
                 </div>
                 <div>
                   <p className="text-slate-500 mb-1">Previous Disease History</p>
-                  <p className="font-medium text-slate-900">{selectedUser.previousHistory || "None"}</p>
+                  <p className="font-medium text-slate-900">{selectedUser.previousDiseaseHistory || "None"}</p>
                 </div>
                 <div>
                   <p className="text-slate-500 mb-1">Family Disease History</p>
-                  <p className="font-medium text-slate-900">{selectedUser.familyHistory || "None"}</p>
+                  <p className="font-medium text-slate-900">{selectedUser.familyDiseaseHistory || "None"}</p>
                 </div>
                 <div>
                   <p className="text-slate-500 mb-1">Emergency Contact</p>
-                  <p className="font-medium text-slate-900">{selectedUser.emergencyContact}</p>
+                  <p className="font-medium text-slate-900">{selectedUser.emergencyContact || "None"}</p>
                 </div>
               </div>
             </div>

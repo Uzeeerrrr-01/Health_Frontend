@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useMemo } from "react"
+import React, { useState, useEffect, useMemo } from "react"
 import { Card, CardContent } from "@/components/ui/Card"
 import { Button } from "@/components/ui/Button"
 import { Input, Label } from "@/components/ui/Input"
@@ -8,16 +8,10 @@ import { Badge } from "@/components/ui/Badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/Table"
 import { Modal } from "@/components/ui/Modal"
 import { Search, Plus, Edit2, Trash2, Eye, Filter } from "lucide-react"
-
-const INITIAL_DOCTORS = [
-  { id: 1, name: "Dr. Sarah Jenkins", specialization: "Cardiology", verificationStatus: "Verified", accountStatus: "Active", email: "sarah.j@example.com", phone: "+1 555-0101", license: "MD12345", experience: "12", hospital: "General City Hospital", address: "123 Medical Way, NY" },
-  { id: 2, name: "Dr. Michael Chen", specialization: "Neurology", verificationStatus: "Pending", accountStatus: "Pending", email: "m.chen@example.com", phone: "+1 555-0102", license: "MD67890", experience: "8", hospital: "NeuroHealth Clinic", address: "45 Brain Ave, CA" },
-  { id: 3, name: "Dr. Emily Rodriguez", specialization: "Pediatrics", verificationStatus: "Verified", accountStatus: "Active", email: "emily.r@example.com", phone: "+1 555-0103", license: "MD11223", experience: "15", hospital: "KidsCare Center", address: "88 Child Lane, TX" },
-  { id: 4, name: "Dr. James Wilson", specialization: "Orthopedics", verificationStatus: "Rejected", accountStatus: "Suspended", email: "j.wilson@example.com", phone: "+1 555-0104", license: "MD44556", experience: "20", hospital: "OrthoPlus", address: "20 Bone St, FL" },
-]
+import api from "@/lib/api"
 
 export default function AdminDoctors() {
-  const [doctors, setDoctors] = useState(INITIAL_DOCTORS)
+  const [doctors, setDoctors] = useState([])
   const [searchQuery, setSearchQuery] = useState("")
   const [specFilter, setSpecFilter] = useState("All")
   const [verifFilter, setVerifFilter] = useState("All")
@@ -27,33 +21,70 @@ export default function AdminDoctors() {
   const [isViewModalOpen, setIsViewModalOpen] = useState(false)
   
   const [selectedDoctor, setSelectedDoctor] = useState(null)
+  const [isLoading, setIsLoading] = useState(true)
   
   // Form State
   const [formData, setFormData] = useState({
-    name: "", email: "", phone: "", specialization: "", license: "", experience: "", hospital: "", address: "", verificationStatus: "Pending", accountStatus: "Pending"
+    fullName: "", email: "", phone: "", specialization: "", licenseNumber: "", yearsOfExperience: "", hospitalName: "", clinicAddress: "", verificationStatus: "pending", accountStatus: "active"
   })
+
+  const fetchDoctors = async () => {
+    try {
+      setIsLoading(true)
+      const res = await api.get('/admin/doctors')
+      if (res.data.success) {
+        setDoctors(res.data.data)
+      }
+    } catch (err) {
+      console.error("Failed to fetch doctors:", err)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchDoctors()
+  }, [])
 
   const filteredDoctors = useMemo(() => {
     return doctors.filter(doc => {
-      const matchesSearch = 
-        doc.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-        doc.specialization.toLowerCase().includes(searchQuery.toLowerCase());
+      const nameMatch = doc.fullName ? doc.fullName.toLowerCase().includes(searchQuery.toLowerCase()) : false;
+      const specMatch = doc.specialization ? doc.specialization.toLowerCase().includes(searchQuery.toLowerCase()) : false;
+      const matchesSearch = nameMatch || specMatch;
+      
       const matchesSpec = specFilter === "All" || doc.specialization === specFilter;
-      const matchesVerif = verifFilter === "All" || doc.verificationStatus === verifFilter;
+      
+      let vStatus = "Pending"
+      if (doc.verificationStatus === "approved") vStatus = "Verified"
+      else if (doc.verificationStatus === "rejected") vStatus = "Rejected"
+      
+      const matchesVerif = verifFilter === "All" || vStatus === verifFilter;
       return matchesSearch && matchesSpec && matchesVerif;
     });
   }, [doctors, searchQuery, specFilter, verifFilter]);
 
-  const specializations = ["All", ...new Set(doctors.map(d => d.specialization))];
+  const specializations = ["All", ...new Set(doctors.map(d => d.specialization).filter(Boolean))];
 
   const handleOpenAdd = () => {
-    setFormData({ name: "", email: "", phone: "", specialization: "", license: "", experience: "", hospital: "", address: "", verificationStatus: "Pending", accountStatus: "Pending" })
-    setSelectedDoctor(null)
-    setIsFormModalOpen(true)
+    // Note: The backend route /admin/doctors POST does not exist. Adding doctors is done via /auth/doctor/register.
+    // For completeness in this admin view, we could add it but typically admins edit/delete.
+    // We'll leave the UI for Add, but it would actually call an API if we implemented it, or redirect to register.
+    alert("To add a doctor, please use the registration flow. Admins can edit and verify existing doctors.");
   }
 
   const handleOpenEdit = (doctor) => {
-    setFormData(doctor)
+    setFormData({
+      fullName: doctor.fullName || "",
+      email: doctor.email || "",
+      phone: doctor.phone || "",
+      specialization: doctor.specialization || "",
+      licenseNumber: doctor.licenseNumber || "",
+      yearsOfExperience: doctor.yearsOfExperience || "",
+      hospitalName: doctor.hospitalName || "",
+      clinicAddress: doctor.clinicAddress || "",
+      verificationStatus: doctor.verificationStatus || "pending",
+      accountStatus: doctor.accountStatus || "active"
+    })
     setSelectedDoctor(doctor)
     setIsFormModalOpen(true)
   }
@@ -68,30 +99,45 @@ export default function AdminDoctors() {
     setIsDeleteModalOpen(true)
   }
 
-  const handleSaveDoctor = (e) => {
+  const handleSaveDoctor = async (e) => {
     e.preventDefault()
     if (selectedDoctor) {
-      setDoctors(doctors.map(d => d.id === selectedDoctor.id ? { ...formData, id: selectedDoctor.id } : d))
-    } else {
-      setDoctors([...doctors, { ...formData, id: Date.now() }])
+      try {
+        await api.put(`/admin/doctors/${selectedDoctor._id}`, formData)
+        fetchDoctors()
+        setIsFormModalOpen(false)
+      } catch (err) {
+        console.error("Failed to update doctor:", err)
+        alert("Failed to update doctor")
+      }
     }
-    setIsFormModalOpen(false)
   }
 
-  const handleDeleteDoctor = () => {
-    setDoctors(doctors.filter(d => d.id !== selectedDoctor.id))
-    setIsDeleteModalOpen(false)
+  const handleDeleteDoctor = async () => {
+    if (selectedDoctor) {
+      try {
+        await api.delete(`/admin/doctors/${selectedDoctor._id}`)
+        fetchDoctors()
+        setIsDeleteModalOpen(false)
+      } catch (err) {
+        console.error("Failed to delete doctor:", err)
+        alert("Failed to delete doctor")
+      }
+    }
   }
 
   const getStatusBadgeVariant = (status) => {
-    switch (status) {
-      case "Active":
-      case "Verified": return "success";
-      case "Pending": return "warning";
-      case "Suspended":
-      case "Rejected": return "destructive";
-      default: return "default";
-    }
+    const s = status ? status.toLowerCase() : "";
+    if (s === "active" || s === "approved" || s === "verified") return "success";
+    if (s === "pending") return "warning";
+    if (s === "suspended" || s === "rejected") return "destructive";
+    return "default";
+  }
+  
+  const getDisplayStatus = (status) => {
+    const s = status ? status.toLowerCase() : "";
+    if (s === "approved") return "Verified";
+    return status ? status.charAt(0).toUpperCase() + status.slice(1) : "";
   }
 
   return (
@@ -158,7 +204,13 @@ export default function AdminDoctors() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredDoctors.length === 0 ? (
+              {isLoading ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center py-8 text-slate-500">
+                    Loading doctors...
+                  </TableCell>
+                </TableRow>
+              ) : filteredDoctors.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={6} className="text-center py-8 text-slate-500">
                     No doctors found.
@@ -166,20 +218,20 @@ export default function AdminDoctors() {
                 </TableRow>
               ) : (
                 filteredDoctors.map(doctor => (
-                  <TableRow key={doctor.id}>
-                    <TableCell className="font-medium text-slate-900">{doctor.name}</TableCell>
+                  <TableRow key={doctor._id}>
+                    <TableCell className="font-medium text-slate-900">{doctor.fullName}</TableCell>
                     <TableCell className="text-slate-700">{doctor.specialization}</TableCell>
                     <TableCell>
                       <div className="flex flex-col">
                         <span className="text-sm text-slate-900">{doctor.email}</span>
-                        <span className="text-xs text-slate-500">{doctor.phone}</span>
+                        <span className="text-xs text-slate-500">{doctor.phone || 'N/A'}</span>
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge variant={getStatusBadgeVariant(doctor.verificationStatus)}>{doctor.verificationStatus}</Badge>
+                      <Badge variant={getStatusBadgeVariant(doctor.verificationStatus)}>{getDisplayStatus(doctor.verificationStatus)}</Badge>
                     </TableCell>
                     <TableCell>
-                      <Badge variant={getStatusBadgeVariant(doctor.accountStatus)}>{doctor.accountStatus}</Badge>
+                      <Badge variant={getStatusBadgeVariant(doctor.accountStatus)}>{getDisplayStatus(doctor.accountStatus)}</Badge>
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-2">
@@ -211,8 +263,8 @@ export default function AdminDoctors() {
         <form onSubmit={handleSaveDoctor} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="name" className="text-slate-700">Full Name</Label>
-              <Input id="name" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} required className="text-slate-900" />
+              <Label htmlFor="fullName" className="text-slate-700">Full Name</Label>
+              <Input id="fullName" value={formData.fullName} onChange={e => setFormData({...formData, fullName: e.target.value})} required className="text-slate-900" />
             </div>
             <div className="space-y-2">
               <Label htmlFor="email" className="text-slate-700">Email</Label>
@@ -220,27 +272,27 @@ export default function AdminDoctors() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="phone" className="text-slate-700">Phone</Label>
-              <Input id="phone" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} required className="text-slate-900" />
+              <Input id="phone" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} className="text-slate-900" />
             </div>
             <div className="space-y-2">
               <Label htmlFor="specialization" className="text-slate-700">Specialization</Label>
               <Input id="specialization" value={formData.specialization} onChange={e => setFormData({...formData, specialization: e.target.value})} required className="text-slate-900" />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="license" className="text-slate-700">License Number</Label>
-              <Input id="license" value={formData.license} onChange={e => setFormData({...formData, license: e.target.value})} required className="text-slate-900" />
+              <Label htmlFor="licenseNumber" className="text-slate-700">License Number</Label>
+              <Input id="licenseNumber" value={formData.licenseNumber} onChange={e => setFormData({...formData, licenseNumber: e.target.value})} required className="text-slate-900" />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="experience" className="text-slate-700">Years of Experience</Label>
-              <Input id="experience" type="number" value={formData.experience} onChange={e => setFormData({...formData, experience: e.target.value})} required className="text-slate-900" />
+              <Label htmlFor="yearsOfExperience" className="text-slate-700">Years of Experience</Label>
+              <Input id="yearsOfExperience" type="number" value={formData.yearsOfExperience} onChange={e => setFormData({...formData, yearsOfExperience: e.target.value})} required className="text-slate-900" />
             </div>
             <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="hospital" className="text-slate-700">Hospital / Clinic Name</Label>
-              <Input id="hospital" value={formData.hospital} onChange={e => setFormData({...formData, hospital: e.target.value})} required className="text-slate-900" />
+              <Label htmlFor="hospitalName" className="text-slate-700">Hospital / Clinic Name</Label>
+              <Input id="hospitalName" value={formData.hospitalName} onChange={e => setFormData({...formData, hospitalName: e.target.value})} required className="text-slate-900" />
             </div>
             <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="address" className="text-slate-700">Clinic Address</Label>
-              <Input id="address" value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} required className="text-slate-900" />
+              <Label htmlFor="clinicAddress" className="text-slate-700">Clinic Address</Label>
+              <Input id="clinicAddress" value={formData.clinicAddress} onChange={e => setFormData({...formData, clinicAddress: e.target.value})} required className="text-slate-900" />
             </div>
             <div className="space-y-2">
               <Label htmlFor="verificationStatus" className="text-slate-700">Verification Status</Label>
@@ -250,9 +302,9 @@ export default function AdminDoctors() {
                 value={formData.verificationStatus}
                 onChange={e => setFormData({...formData, verificationStatus: e.target.value})}
               >
-                <option value="Verified">Verified</option>
-                <option value="Pending">Pending</option>
-                <option value="Rejected">Rejected</option>
+                <option value="approved">Approved</option>
+                <option value="pending">Pending</option>
+                <option value="rejected">Rejected</option>
               </select>
             </div>
             <div className="space-y-2">
@@ -263,9 +315,8 @@ export default function AdminDoctors() {
                 value={formData.accountStatus}
                 onChange={e => setFormData({...formData, accountStatus: e.target.value})}
               >
-                <option value="Active">Active</option>
-                <option value="Pending">Pending</option>
-                <option value="Suspended">Suspended</option>
+                <option value="active">Active</option>
+                <option value="suspended">Suspended</option>
               </select>
             </div>
           </div>
@@ -279,7 +330,7 @@ export default function AdminDoctors() {
       {/* Delete Confirmation Modal */}
       <Modal isOpen={isDeleteModalOpen} onClose={() => setIsDeleteModalOpen(false)} title="Confirm Deletion">
         <div className="space-y-4">
-          <p className="text-slate-600">Are you sure you want to delete <span className="font-semibold text-slate-900">{selectedDoctor?.name}</span>? This action cannot be undone.</p>
+          <p className="text-slate-600">Are you sure you want to delete <span className="font-semibold text-slate-900">{selectedDoctor?.fullName}</span>? This action cannot be undone.</p>
           <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
             <Button variant="outline" onClick={() => setIsDeleteModalOpen(false)}>Cancel</Button>
             <Button variant="danger" onClick={handleDeleteDoctor}>Delete Doctor</Button>
@@ -294,13 +345,13 @@ export default function AdminDoctors() {
             <div className="grid grid-cols-2 gap-y-4 gap-x-6 text-sm">
               <div>
                 <p className="text-slate-500 mb-1">Full Name</p>
-                <p className="font-medium text-slate-900">{selectedDoctor.name}</p>
+                <p className="font-medium text-slate-900">{selectedDoctor.fullName}</p>
               </div>
               <div>
                 <p className="text-slate-500 mb-1">Status / Verification</p>
                 <div className="flex items-center gap-2">
-                  <Badge variant={getStatusBadgeVariant(selectedDoctor.accountStatus)}>{selectedDoctor.accountStatus}</Badge>
-                  <Badge variant={getStatusBadgeVariant(selectedDoctor.verificationStatus)}>{selectedDoctor.verificationStatus}</Badge>
+                  <Badge variant={getStatusBadgeVariant(selectedDoctor.accountStatus)}>{getDisplayStatus(selectedDoctor.accountStatus)}</Badge>
+                  <Badge variant={getStatusBadgeVariant(selectedDoctor.verificationStatus)}>{getDisplayStatus(selectedDoctor.verificationStatus)}</Badge>
                 </div>
               </div>
               <div>
@@ -309,7 +360,7 @@ export default function AdminDoctors() {
               </div>
               <div>
                 <p className="text-slate-500 mb-1">License Number</p>
-                <p className="font-medium text-slate-900">{selectedDoctor.license}</p>
+                <p className="font-medium text-slate-900">{selectedDoctor.licenseNumber}</p>
               </div>
               <div>
                 <p className="text-slate-500 mb-1">Email</p>
@@ -317,11 +368,11 @@ export default function AdminDoctors() {
               </div>
               <div>
                 <p className="text-slate-500 mb-1">Phone</p>
-                <p className="font-medium text-slate-900">{selectedDoctor.phone}</p>
+                <p className="font-medium text-slate-900">{selectedDoctor.phone || 'N/A'}</p>
               </div>
               <div>
                 <p className="text-slate-500 mb-1">Years of Experience</p>
-                <p className="font-medium text-slate-900">{selectedDoctor.experience} years</p>
+                <p className="font-medium text-slate-900">{selectedDoctor.yearsOfExperience} years</p>
               </div>
             </div>
 
@@ -330,11 +381,11 @@ export default function AdminDoctors() {
               <div className="grid grid-cols-1 gap-y-4 gap-x-6">
                 <div>
                   <p className="text-slate-500 mb-1">Hospital / Clinic Name</p>
-                  <p className="font-medium text-slate-900">{selectedDoctor.hospital}</p>
+                  <p className="font-medium text-slate-900">{selectedDoctor.hospitalName}</p>
                 </div>
                 <div>
                   <p className="text-slate-500 mb-1">Clinic Address</p>
-                  <p className="font-medium text-slate-900">{selectedDoctor.address}</p>
+                  <p className="font-medium text-slate-900">{selectedDoctor.clinicAddress}</p>
                 </div>
               </div>
             </div>

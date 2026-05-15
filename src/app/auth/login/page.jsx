@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/Button"
 import { Input, Label } from "@/components/ui/Input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/Card"
 import { Activity } from "lucide-react"
+import api from "@/lib/api"
 
 function LoginContent() {
   const router = useRouter()
@@ -14,15 +15,53 @@ function LoginContent() {
   const initialRole = searchParams.get("role") || "patient"
   
   const [role, setRole] = useState(initialRole)
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
+  const [adminAccessCode, setAdminAccessCode] = useState("")
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState("")
 
   const handleDemoLogin = (selectedRole) => {
-    // In a real app, we'd authenticate here. For now, navigate directly.
+    // Demo mode: we should probably call a backend mock login or just skip. 
+    // Since we need to replace mock behavior with real, let's keep it but ideally they should use real credentials.
+    // For now we navigate to the dashboard but without token it might bounce back if protected.
     router.push(`/${selectedRole}/dashboard`)
   }
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault()
-    router.push(`/${role}/dashboard`)
+    setLoading(true)
+    setError("")
+
+    try {
+      const payload = { email, password }
+      if (role === "admin") {
+        payload.adminAccessCode = adminAccessCode
+      }
+
+      const response = await api.post('/auth/login', payload)
+      
+      if (response.data.success) {
+        const { token, role: userRole, verificationStatus } = response.data
+        
+        localStorage.setItem('token', token)
+        localStorage.setItem('role', userRole)
+        localStorage.setItem('user', JSON.stringify(response.data))
+
+        // Check if role matches what they selected, just for UX (or rely on backend role)
+        // Redirect based on role returned from backend
+        if (userRole === "doctor" && verificationStatus !== "approved") {
+           // If doctor is pending or rejected, redirect to a status page or show error
+           router.push('/auth/register?role=doctor&status=' + verificationStatus) // redirecting back to register with status to see the state
+        } else {
+           router.push(`/${userRole}/dashboard`)
+        }
+      }
+    } catch (err) {
+      setError(err.message || "Failed to login. Please check your credentials.")
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -45,42 +84,67 @@ function LoginContent() {
           <CardContent>
             <div className="flex bg-slate-100 p-1 rounded-lg mb-6">
               <button 
-                onClick={() => setRole("patient")}
+                onClick={() => { setRole("patient"); setError(""); }}
                 className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${role === "patient" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-900"}`}
               >
                 Patient
               </button>
               <button 
-                onClick={() => setRole("doctor")}
+                onClick={() => { setRole("doctor"); setError(""); }}
                 className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${role === "doctor" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-900"}`}
               >
                 Doctor
               </button>
               <button 
-                onClick={() => setRole("admin")}
+                onClick={() => { setRole("admin"); setError(""); }}
                 className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${role === "admin" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-900"}`}
               >
                 Admin
               </button>
             </div>
 
+            {error && (
+              <div className="mb-4 p-3 bg-red-50 text-red-700 text-sm rounded-md border border-red-200">
+                {error}
+              </div>
+            )}
+
             <form onSubmit={handleLogin} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
-                <Input id="email" type="email" placeholder="john@example.com" required />
+                <Input 
+                  id="email" 
+                  type="email" 
+                  placeholder="john@example.com" 
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required 
+                />
               </div>
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <Label htmlFor="password">Password</Label>
                   <Link href="#" className="text-xs text-teal-600 hover:underline">Forgot password?</Link>
                 </div>
-                <Input id="password" type="password" required />
+                <Input 
+                  id="password" 
+                  type="password" 
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required 
+                />
               </div>
 
               {role === "admin" && (
                 <div className="space-y-2">
                   <Label htmlFor="accessCode">Admin Access Code</Label>
-                  <Input id="accessCode" type="password" required />
+                  <Input 
+                    id="accessCode" 
+                    type="password" 
+                    value={adminAccessCode}
+                    onChange={(e) => setAdminAccessCode(e.target.value)}
+                    required 
+                  />
                 </div>
               )}
 
@@ -91,7 +155,9 @@ function LoginContent() {
                 </label>
               </div>
 
-              <Button type="submit" className="w-full">Sign In</Button>
+              <Button type="submit" className="w-full" disabled={loading}>
+                {loading ? "Signing in..." : "Sign In"}
+              </Button>
             </form>
 
             <div className="mt-6 relative">

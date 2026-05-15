@@ -1,12 +1,32 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import { Bell, Search, User, LogOut } from "lucide-react"
 import { Input } from "@/components/ui/Input"
 import { MOCK_USER } from "@/lib/mockData"
 import Link from "next/link"
 
 export function Topbar({ role }) {
-  const user = MOCK_USER[role]
+  const [user, setUser] = useState(MOCK_USER[role] || { name: "User" })
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('user')
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored)
+          const userData = parsed.user || parsed
+          setUser({
+            ...userData,
+            name: userData.fullName || userData.name || "User",
+            avatar: userData.avatar || ""
+          })
+        } catch (e) {
+          console.error("Failed to parse user from local storage")
+        }
+      }
+    }
+  }, [])
 
   return (
     <header className="h-16 border-b border-slate-200 bg-white px-4 sm:px-8 flex items-center justify-between sticky top-0 z-30">
