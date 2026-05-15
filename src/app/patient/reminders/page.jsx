@@ -1,32 +1,88 @@
 "use client"
 
-import { useState } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card"
+import { useState, useEffect } from "react"
+import { Card, CardContent } from "@/components/ui/Card"
 import { Button } from "@/components/ui/Button"
 import { Input, Label } from "@/components/ui/Input"
 import { Modal } from "@/components/ui/Modal"
-import { Bell, Plus, Check, X, Clock, Settings2, Moon, Sun, Sunrise } from "lucide-react"
+import { Bell, Plus, Check, X, Clock, Settings2, Moon, Sun, Sunrise, Trash2 } from "lucide-react"
+import api from "@/lib/api"
 
 export default function MedicineReminders() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
-  const [reminders, setReminders] = useState([
-    { id: 1, name: "Amoxicillin 500mg", time: "08:00 AM", period: "Morning", status: "taken", instruction: "After food" },
-    { id: 2, name: "Vitamin D3", time: "01:00 PM", period: "Afternoon", status: "pending", instruction: "With meal" },
-    { id: 3, name: "Atorvastatin 20mg", time: "09:00 PM", period: "Night", status: "pending", instruction: "Before sleep" },
-  ])
+  const [reminders, setReminders] = useState([])
+  const [isLoading, setIsLoading] = useState(true)
+  
+  const [formData, setFormData] = useState({
+    medicineName: "",
+    time: "",
+    period: "Morning",
+    instructions: ""
+  })
 
-  const toggleStatus = (id, newStatus) => {
-    setReminders(reminders.map(r => r.id === id ? { ...r, status: newStatus } : r))
+  const fetchReminders = async () => {
+    try {
+      setIsLoading(true)
+      const res = await api.get('/medicines/patient')
+      if (res.data.success) {
+        setReminders(res.data.data)
+      }
+    } catch (err) {
+      console.error("Failed to fetch medicine reminders:", err)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchReminders()
+  }, [])
+
+  const handleAddReminder = async (e) => {
+    e.preventDefault()
+    try {
+      await api.post('/medicines', formData)
+      fetchReminders()
+      setIsAddModalOpen(false)
+      setFormData({ medicineName: "", time: "", period: "Morning", instructions: "" })
+    } catch (err) {
+      console.error("Failed to add reminder:", err)
+      alert("Failed to add reminder")
+    }
+  }
+
+  const handleDeleteReminder = async (id) => {
+    if (!confirm("Are you sure you want to delete this reminder?")) return;
+    try {
+      await api.delete(`/medicines/${id}`)
+      fetchReminders()
+    } catch (err) {
+      console.error("Failed to delete reminder:", err)
+    }
+  }
+
+  const toggleStatus = async (id, newStatus) => {
+    try {
+      // Optimistic update
+      setReminders(reminders.map(r => r._id === id ? { ...r, status: newStatus } : r))
+      await api.put(`/medicines/${id}/status`, { status: newStatus })
+    } catch (err) {
+      console.error("Failed to update status:", err)
+      // Revert on failure
+      fetchReminders()
+    }
   }
 
   const getPeriodIcon = (period) => {
-    switch (period) {
-      case "Morning": return <Sunrise className="h-5 w-5 text-amber-500" />
-      case "Afternoon": return <Sun className="h-5 w-5 text-orange-500" />
-      case "Night": return <Moon className="h-5 w-5 text-indigo-500" />
-      default: return <Clock className="h-5 w-5 text-slate-500" />
-    }
+    const p = period.toLowerCase()
+    if (p === 'morning') return <Sunrise className="h-5 w-5 text-amber-500" />
+    if (p === 'afternoon') return <Sun className="h-5 w-5 text-orange-500" />
+    if (p === 'night') return <Moon className="h-5 w-5 text-indigo-500" />
+    return <Clock className="h-5 w-5 text-slate-500" />
   }
+
+  const pendingReminders = reminders.filter(r => r.status === 'pending')
+  const nextReminder = pendingReminders.length > 0 ? pendingReminders[0] : null
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
@@ -45,109 +101,153 @@ export default function MedicineReminders() {
         </div>
       </div>
 
-      {/* Reminder Notification Banner (Mock) */}
-      <Card className="border-teal-200 bg-teal-50 shadow-sm overflow-hidden animate-in fade-in slide-in-from-top-4">
-        <CardContent className="p-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="h-10 w-10 bg-teal-100 rounded-full flex items-center justify-center animate-pulse">
-              <Bell className="h-5 w-5 text-teal-600" />
+      {/* Reminder Notification Banner */}
+      {nextReminder && (
+        <Card className="border-teal-200 bg-teal-50 shadow-sm overflow-hidden animate-in fade-in slide-in-from-top-4">
+          <CardContent className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="h-10 w-10 bg-teal-100 rounded-full flex items-center justify-center animate-pulse shrink-0">
+                <Bell className="h-5 w-5 text-teal-600" />
+              </div>
+              <div>
+                <p className="font-semibold text-teal-900">Next medication</p>
+                <p className="text-sm text-teal-700 font-medium">{nextReminder.medicineName} • {nextReminder.time}</p>
+              </div>
             </div>
-            <div>
-              <p className="font-semibold text-teal-900">Time for your medication</p>
-              <p className="text-sm text-teal-700 font-medium">Vitamin D3 • 01:00 PM</p>
+            <div className="flex gap-2 w-full sm:w-auto">
+              <Button variant="outline" size="sm" className="bg-white text-slate-600 border-teal-200 flex-1 sm:flex-none" onClick={() => toggleStatus(nextReminder._id, 'skipped')}>Skip</Button>
+              <Button size="sm" className="bg-teal-600 hover:bg-teal-700 text-white flex-1 sm:flex-none" onClick={() => toggleStatus(nextReminder._id, 'taken')}>Take Now</Button>
             </div>
-          </div>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" className="bg-white text-slate-600 border-teal-200" onClick={() => toggleStatus(2, 'skipped')}>Skip</Button>
-            <Button size="sm" className="bg-teal-600 hover:bg-teal-700 text-white" onClick={() => toggleStatus(2, 'taken')}>Take Now</Button>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Schedule List */}
       <div className="space-y-8">
-        {['Morning', 'Afternoon', 'Night'].map((period) => {
-          const periodReminders = reminders.filter(r => r.period === period)
-          if (periodReminders.length === 0) return null;
-
-          return (
-            <div key={period} className="space-y-4">
-              <h3 className="text-lg font-semibold text-slate-900 border-b border-slate-200 pb-2 flex items-center gap-2">
-                {getPeriodIcon(period)} {period}
-              </h3>
-              <div className="grid gap-4">
-                {periodReminders.map((reminder) => (
-                  <Card key={reminder.id} className={reminder.status === 'taken' ? 'opacity-60 bg-slate-50' : ''}>
-                    <CardContent className="p-4 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                      <div className="flex items-center gap-4">
-                        <div className="h-12 w-12 bg-slate-100 rounded-lg flex flex-col items-center justify-center shrink-0 border border-slate-200">
-                          <span className="text-sm font-bold text-slate-900">{reminder.time.split(' ')[0]}</span>
-                          <span className="text-[10px] font-medium text-slate-500 uppercase">{reminder.time.split(' ')[1]}</span>
-                        </div>
-                        <div>
-                          <h4 className={`text-lg font-semibold ${reminder.status === 'taken' ? 'text-slate-500 line-through' : 'text-slate-900'}`}>
-                            {reminder.name}
-                          </h4>
-                          <p className="text-sm text-slate-500">{reminder.instruction}</p>
-                        </div>
-                      </div>
-                      
-                      <div className="flex items-center gap-2 ml-16 sm:ml-0">
-                        {reminder.status === 'taken' ? (
-                          <div className="flex items-center gap-2 text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-full text-sm font-medium border border-emerald-100">
-                            <Check className="h-4 w-4" /> Taken
-                          </div>
-                        ) : reminder.status === 'skipped' ? (
-                          <div className="flex items-center gap-2 text-slate-500 bg-slate-100 px-3 py-1.5 rounded-full text-sm font-medium">
-                            <X className="h-4 w-4" /> Skipped
-                          </div>
-                        ) : (
-                          <>
-                            <Button variant="outline" size="sm" onClick={() => toggleStatus(reminder.id, 'skipped')}>Skip</Button>
-                            <Button size="sm" onClick={() => toggleStatus(reminder.id, 'taken')} className="gap-1 bg-teal-600 hover:bg-teal-700">
-                              <Check className="h-4 w-4" /> Mark Taken
-                            </Button>
-                          </>
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
+        {isLoading ? (
+          <div className="text-center py-8 text-slate-500">Loading reminders...</div>
+        ) : reminders.length === 0 ? (
+          <div className="text-center py-12 bg-white border border-slate-200 rounded-xl border-dashed">
+            <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 mb-4">
+              <Clock className="h-6 w-6 text-slate-400" />
             </div>
-          )
-        })}
+            <h3 className="text-lg font-medium text-slate-900">No active reminders</h3>
+            <p className="text-slate-500 mt-1 mb-4">Add your first medicine reminder.</p>
+            <Button onClick={() => setIsAddModalOpen(true)}>Add Reminder</Button>
+          </div>
+        ) : (
+          ['Morning', 'Afternoon', 'Night'].map((period) => {
+            const periodReminders = reminders.filter(r => r.period.toLowerCase() === period.toLowerCase())
+            if (periodReminders.length === 0) return null;
+
+            return (
+              <div key={period} className="space-y-4">
+                <h3 className="text-lg font-semibold text-slate-900 border-b border-slate-200 pb-2 flex items-center gap-2">
+                  {getPeriodIcon(period)} {period}
+                </h3>
+                <div className="grid gap-4">
+                  {periodReminders.map((reminder) => (
+                    <Card key={reminder._id} className={`group ${reminder.status === 'taken' ? 'opacity-60 bg-slate-50' : ''}`}>
+                      <CardContent className="p-4 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div className="flex items-center gap-4">
+                          <div className="h-12 w-12 bg-slate-100 rounded-lg flex flex-col items-center justify-center shrink-0 border border-slate-200">
+                            <span className="text-sm font-bold text-slate-900">
+                              {reminder.time.includes(' ') ? reminder.time.split(' ')[0] : reminder.time}
+                            </span>
+                            <span className="text-[10px] font-medium text-slate-500 uppercase">
+                              {reminder.time.includes(' ') ? reminder.time.split(' ')[1] : ''}
+                            </span>
+                          </div>
+                          <div>
+                            <h4 className={`text-lg font-semibold ${reminder.status === 'taken' ? 'text-slate-500 line-through' : 'text-slate-900'}`}>
+                              {reminder.medicineName}
+                            </h4>
+                            <p className="text-sm text-slate-500">{reminder.instructions}</p>
+                          </div>
+                        </div>
+                        
+                        <div className="flex items-center gap-2 ml-16 sm:ml-0">
+                          {reminder.status === 'taken' ? (
+                            <div className="flex items-center gap-2 text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-full text-sm font-medium border border-emerald-100">
+                              <Check className="h-4 w-4" /> Taken
+                            </div>
+                          ) : reminder.status === 'skipped' ? (
+                            <div className="flex items-center gap-2 text-slate-500 bg-slate-100 px-3 py-1.5 rounded-full text-sm font-medium">
+                              <X className="h-4 w-4" /> Skipped
+                            </div>
+                          ) : (
+                            <>
+                              <Button variant="outline" size="sm" onClick={() => toggleStatus(reminder._id, 'skipped')}>Skip</Button>
+                              <Button size="sm" onClick={() => toggleStatus(reminder._id, 'taken')} className="gap-1 bg-teal-600 hover:bg-teal-700">
+                                <Check className="h-4 w-4" /> Mark Taken
+                              </Button>
+                            </>
+                          )}
+                          <Button variant="ghost" size="icon" onClick={() => handleDeleteReminder(reminder._id)} className="opacity-0 group-hover:opacity-100 transition-opacity ml-2" title="Delete">
+                            <Trash2 className="h-4 w-4 text-red-500" />
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </div>
+            )
+          })
+        )}
       </div>
 
       <Modal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} title="Add Medicine Reminder">
-        <div className="space-y-4">
+        <form onSubmit={handleAddReminder} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="medName">Medicine Name</Label>
-            <Input id="medName" placeholder="e.g. Amoxicillin 500mg" />
+            <Input 
+              id="medName" 
+              placeholder="e.g. Amoxicillin 500mg" 
+              value={formData.medicineName}
+              onChange={(e) => setFormData({...formData, medicineName: e.target.value})}
+              required
+            />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="time">Time</Label>
-              <Input id="time" type="time" />
+              <Input 
+                id="time" 
+                type="time" 
+                value={formData.time}
+                onChange={(e) => setFormData({...formData, time: e.target.value})}
+                required
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="period">Period</Label>
-              <select id="period" className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600">
-                <option>Morning</option>
-                <option>Afternoon</option>
-                <option>Night</option>
+              <select 
+                id="period" 
+                className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600"
+                value={formData.period}
+                onChange={(e) => setFormData({...formData, period: e.target.value})}
+              >
+                <option value="Morning">Morning</option>
+                <option value="Afternoon">Afternoon</option>
+                <option value="Night">Night</option>
               </select>
             </div>
           </div>
           <div className="space-y-2">
             <Label htmlFor="instruction">Instructions</Label>
-            <Input id="instruction" placeholder="e.g. After food" />
+            <Input 
+              id="instruction" 
+              placeholder="e.g. After food" 
+              value={formData.instructions}
+              onChange={(e) => setFormData({...formData, instructions: e.target.value})}
+            />
           </div>
           <div className="pt-4 flex justify-end gap-2 border-t border-slate-100">
-            <Button variant="outline" onClick={() => setIsAddModalOpen(false)}>Cancel</Button>
-            <Button onClick={() => setIsAddModalOpen(false)}>Save Reminder</Button>
+            <Button type="button" variant="outline" onClick={() => setIsAddModalOpen(false)}>Cancel</Button>
+            <Button type="submit">Save Reminder</Button>
           </div>
-        </div>
+        </form>
       </Modal>
     </div>
   )

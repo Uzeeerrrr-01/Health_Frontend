@@ -8,6 +8,7 @@ import { Input, Label } from "@/components/ui/Input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/Card"
 import { Badge } from "@/components/ui/Badge"
 import { Activity, Upload, CheckCircle2, Clock, XCircle, AlertCircle, Image as ImageIcon, FileText } from "lucide-react"
+import api from "@/lib/api"
 
 function RegisterContent() {
   const router = useRouter()
@@ -16,18 +17,86 @@ function RegisterContent() {
   
   const [step, setStep] = useState(1)
   const [isSubmitted, setIsSubmitted] = useState(false)
-  // For demo purposes, we can toggle this to see different states
-  const [verificationStatus, setVerificationStatus] = useState("Pending") // Pending, Approved, Rejected
+  const [verificationStatus, setVerificationStatus] = useState("Pending")
+  const [error, setError] = useState("")
+
+  const [formData, setFormData] = useState({
+    firstName: "", lastName: "", email: "", password: "",
+    age: "", sex: "", bloodGroup: "", allergies: "", medications: "", history: "", familyHistory: "", emergency: "",
+    specialization: "", experience: "", license: "", clinic: "", clinicAddress: ""
+  })
+
+  const [files, setFiles] = useState({
+    governmentId: null, degreeCertificate: null, medicalLicenseProof: null, profilePhoto: null
+  })
 
   const isPatient = role === "patient"
   const isDoctor = role === "doctor"
 
-  const handleRegister = (e) => {
+  const handleChange = (e) => setFormData({ ...formData, [e.target.id]: e.target.value })
+  
+  const handleFileChange = (e, field) => {
+    if (e.target.files && e.target.files[0]) {
+      setFiles({ ...files, [field]: e.target.files[0] })
+    }
+  }
+
+  const handleRegister = async (e) => {
     e.preventDefault()
-    if (isDoctor) {
-      setIsSubmitted(true)
-    } else {
-      router.push(`/${role}/dashboard`)
+    setError("")
+    
+    try {
+      const fullName = `${formData.firstName} ${formData.lastName}`.trim()
+      
+      if (isDoctor) {
+        const payload = new FormData()
+        payload.append('fullName', fullName)
+        payload.append('email', formData.email)
+        payload.append('password', formData.password)
+        payload.append('specialization', formData.specialization)
+        payload.append('yearsOfExperience', formData.experience)
+        payload.append('licenseNumber', formData.license)
+        payload.append('hospitalName', formData.clinic)
+        payload.append('clinicAddress', formData.clinicAddress)
+        
+        if (files.governmentId) payload.append('governmentId', files.governmentId)
+        if (files.degreeCertificate) payload.append('degreeCertificate', files.degreeCertificate)
+        if (files.medicalLicenseProof) payload.append('medicalLicenseProof', files.medicalLicenseProof)
+        
+        const res = await api.post('/auth/doctor/register', payload, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        })
+        
+        if (res.data.success) {
+          setIsSubmitted(true)
+          setVerificationStatus(res.data.verificationStatus || "Pending")
+        }
+      } else {
+        const payload = {
+          fullName,
+          email: formData.email,
+          password: formData.password,
+          age: formData.age,
+          sex: formData.sex,
+          bloodGroup: formData.bloodGroup,
+          allergies: formData.allergies,
+          currentMedications: formData.medications,
+          previousDiseaseHistory: formData.history,
+          familyDiseaseHistory: formData.familyHistory,
+          emergencyContact: formData.emergency
+        }
+        
+        const res = await api.post('/auth/register', payload)
+        
+        if (res.data.success) {
+          localStorage.setItem('token', res.data.token)
+          localStorage.setItem('role', res.data.role)
+          localStorage.setItem('user', JSON.stringify(res.data))
+          router.push(`/${role}/dashboard`)
+        }
+      }
+    } catch (err) {
+      setError(err.message || "Registration failed. Please try again.")
     }
   }
 
@@ -46,17 +115,15 @@ function RegisterContent() {
         <div className="max-w-md w-full">
           <Card className="text-center shadow-md border-slate-200">
             <CardContent className="p-8 flex flex-col items-center">
-              {verificationStatus === "Pending" && (
+              {verificationStatus === "pending" || verificationStatus === "Pending" ? (
                 <div className="h-20 w-20 bg-amber-50 rounded-full flex items-center justify-center mb-6">
                   <Clock className="h-10 w-10 text-amber-500" />
                 </div>
-              )}
-              {verificationStatus === "Approved" && (
+              ) : verificationStatus === "approved" || verificationStatus === "Approved" ? (
                 <div className="h-20 w-20 bg-emerald-50 rounded-full flex items-center justify-center mb-6">
                   <CheckCircle2 className="h-10 w-10 text-emerald-600" />
                 </div>
-              )}
-              {verificationStatus === "Rejected" && (
+              ) : (
                 <div className="h-20 w-20 bg-red-50 rounded-full flex items-center justify-center mb-6">
                   <XCircle className="h-10 w-10 text-red-600" />
                 </div>
@@ -67,37 +134,37 @@ function RegisterContent() {
               <div className="flex items-center gap-2 mb-6">
                 <span className="text-sm font-medium text-slate-500">Status:</span>
                 <Badge variant={
-                  verificationStatus === "Pending" ? "warning" : 
-                  verificationStatus === "Approved" ? "success" : "destructive"
+                  (verificationStatus === "pending" || verificationStatus === "Pending") ? "warning" : 
+                  (verificationStatus === "approved" || verificationStatus === "Approved") ? "success" : "destructive"
                 }>
-                  {verificationStatus === "Pending" && "Pending Admin Approval"}
-                  {verificationStatus === "Approved" && "Approved"}
-                  {verificationStatus === "Rejected" && "Rejected"}
+                  {(verificationStatus === "pending" || verificationStatus === "Pending") && "Pending Admin Approval"}
+                  {(verificationStatus === "approved" || verificationStatus === "Approved") && "Approved"}
+                  {(verificationStatus === "rejected" || verificationStatus === "Rejected") && "Rejected"}
                 </Badge>
               </div>
 
-              {verificationStatus === "Pending" && (
+              {(verificationStatus === "pending" || verificationStatus === "Pending") && (
                 <p className="text-slate-600 text-sm mb-8">
                   Your profile is under admin review.
                 </p>
               )}
 
-              {verificationStatus === "Rejected" && (
+              {(verificationStatus === "rejected" || verificationStatus === "Rejected") && (
                 <div className="bg-red-50 border border-red-200 text-red-800 p-4 rounded-lg text-sm text-left w-full mb-8">
                   <div className="flex items-center gap-2 font-semibold mb-1">
                     <AlertCircle className="h-4 w-4" /> Rejection Reason
                   </div>
-                  <p>The Medical License proof uploaded is blurry and unreadable. Please upload a clearer copy.</p>
+                  <p>Please re-upload your documents and ensure they are clear.</p>
                 </div>
               )}
 
               <div className="w-full flex flex-col gap-3">
-                {verificationStatus === "Rejected" ? (
+                {(verificationStatus === "rejected" || verificationStatus === "Rejected") ? (
                   <Button onClick={() => setIsSubmitted(false)} className="w-full">Update Details</Button>
                 ) : (
                   <Button onClick={() => router.push("/")} variant="outline" className="w-full">Return to Home</Button>
                 )}
-                {verificationStatus === "Approved" && (
+                {(verificationStatus === "approved" || verificationStatus === "Approved") && (
                   <Button onClick={() => router.push("/doctor/dashboard")} className="w-full">Go to Dashboard</Button>
                 )}
               </div>
@@ -128,6 +195,11 @@ function RegisterContent() {
             </CardDescription>
           </CardHeader>
           <CardContent>
+            {error && (
+              <div className="mb-4 p-3 bg-red-50 text-red-700 text-sm rounded-md border border-red-200">
+                {error}
+              </div>
+            )}
             <form onSubmit={handleRegister} className="space-y-6">
               {/* Basic Details - Both Roles */}
               {step === 1 && (
@@ -135,20 +207,20 @@ function RegisterContent() {
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="firstName">First name</Label>
-                      <Input id="firstName" required />
+                      <Input id="firstName" value={formData.firstName} onChange={handleChange} required />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="lastName">Last name</Label>
-                      <Input id="lastName" required />
+                      <Input id="lastName" value={formData.lastName} onChange={handleChange} required />
                     </div>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="email">Email</Label>
-                    <Input id="email" type="email" required />
+                    <Input id="email" type="email" value={formData.email} onChange={handleChange} required />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="password">Password</Label>
-                    <Input id="password" type="password" required />
+                    <Input id="password" type="password" value={formData.password} onChange={handleChange} required />
                   </div>
                   <Button type="button" className="w-full" onClick={() => setStep(2)}>Continue</Button>
                 </div>
@@ -160,11 +232,11 @@ function RegisterContent() {
                   <div className="grid grid-cols-3 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="age">Age</Label>
-                      <Input id="age" type="number" required />
+                      <Input id="age" type="number" value={formData.age} onChange={handleChange} required />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="sex">Sex</Label>
-                      <select id="sex" className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600">
+                      <select id="sex" value={formData.sex} onChange={handleChange} className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600">
                         <option value="">Select</option>
                         <option value="male">Male</option>
                         <option value="female">Female</option>
@@ -173,7 +245,7 @@ function RegisterContent() {
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="bloodGroup">Blood Group</Label>
-                      <select id="bloodGroup" className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600">
+                      <select id="bloodGroup" value={formData.bloodGroup} onChange={handleChange} className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600">
                         <option value="">Select</option>
                         <option value="A+">A+</option>
                         <option value="A-">A-</option>
@@ -189,27 +261,27 @@ function RegisterContent() {
                   
                   <div className="space-y-2">
                     <Label htmlFor="allergies">Allergies (if any)</Label>
-                    <Input id="allergies" placeholder="e.g. Peanuts, Penicillin" />
+                    <Input id="allergies" value={formData.allergies} onChange={handleChange} placeholder="e.g. Peanuts, Penicillin" />
                   </div>
 
                   <div className="space-y-2">
                     <Label htmlFor="medications">Current Medications</Label>
-                    <Input id="medications" placeholder="e.g. Metformin 500mg" />
+                    <Input id="medications" value={formData.medications} onChange={handleChange} placeholder="e.g. Metformin 500mg" />
                   </div>
 
                   <div className="space-y-2">
                     <Label htmlFor="history">Previous Disease History</Label>
-                    <Input id="history" placeholder="e.g. Asthma, Hypertension" />
+                    <Input id="history" value={formData.history} onChange={handleChange} placeholder="e.g. Asthma, Hypertension" />
                   </div>
 
                   <div className="space-y-2">
                     <Label htmlFor="familyHistory">Family Disease History</Label>
-                    <Input id="familyHistory" placeholder="e.g. Diabetes in mother" />
+                    <Input id="familyHistory" value={formData.familyHistory} onChange={handleChange} placeholder="e.g. Diabetes in mother" />
                   </div>
 
                   <div className="space-y-2">
                     <Label htmlFor="emergency">Emergency Contact</Label>
-                    <Input id="emergency" placeholder="Name and Phone Number" required />
+                    <Input id="emergency" value={formData.emergency} onChange={handleChange} placeholder="Name and Phone Number" required />
                   </div>
 
                   <div className="flex gap-4 pt-4 border-t border-slate-100">
@@ -232,7 +304,7 @@ function RegisterContent() {
                     <div className="grid sm:grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label htmlFor="specialization">Specialization <span className="text-red-500">*</span></Label>
-                        <select id="specialization" required className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600">
+                        <select id="specialization" value={formData.specialization} onChange={handleChange} required className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600">
                           <option value="">Select Speciality</option>
                           <option value="cardiology">Cardiology</option>
                           <option value="dermatology">Dermatology</option>
@@ -244,13 +316,13 @@ function RegisterContent() {
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="experience">Years of Experience <span className="text-red-500">*</span></Label>
-                        <Input id="experience" type="number" min="0" required placeholder="e.g. 10" />
+                        <Input id="experience" type="number" value={formData.experience} onChange={handleChange} min="0" required placeholder="e.g. 10" />
                       </div>
                     </div>
 
                     <div className="space-y-2">
                       <Label htmlFor="license">Medical License Number <span className="text-red-500">*</span></Label>
-                      <Input id="license" required placeholder="Enter your registration/license number" />
+                      <Input id="license" value={formData.license} onChange={handleChange} required placeholder="Enter your registration/license number" />
                     </div>
                   </div>
 
@@ -263,12 +335,12 @@ function RegisterContent() {
                     
                     <div className="space-y-2">
                       <Label htmlFor="clinic">Hospital / Clinic Name <span className="text-red-500">*</span></Label>
-                      <Input id="clinic" required placeholder="e.g. City General Hospital" />
+                      <Input id="clinic" value={formData.clinic} onChange={handleChange} required placeholder="e.g. City General Hospital" />
                     </div>
 
                     <div className="space-y-2">
                       <Label htmlFor="clinicAddress">Clinic Address <span className="text-red-500">*</span></Label>
-                      <Input id="clinicAddress" required placeholder="Full address including city and zip code" />
+                      <Input id="clinicAddress" value={formData.clinicAddress} onChange={handleChange} required placeholder="Full address including city and zip code" />
                     </div>
                   </div>
 
@@ -283,49 +355,53 @@ function RegisterContent() {
                       {/* Government ID */}
                       <div className="space-y-2">
                         <Label className="text-sm font-medium">Government ID <span className="text-red-500">*</span></Label>
-                        <div className="border-2 border-dashed border-slate-200 rounded-lg p-6 flex flex-col items-center justify-center text-center cursor-pointer hover:bg-teal-50 hover:border-teal-200 transition-colors group">
+                        <Label htmlFor="file-gov" className="border-2 border-dashed border-slate-200 rounded-lg p-6 flex flex-col items-center justify-center text-center cursor-pointer hover:bg-teal-50 hover:border-teal-200 transition-colors group">
+                          <input type="file" id="file-gov" className="hidden" onChange={(e) => handleFileChange(e, 'governmentId')} />
                           <div className="p-2 bg-slate-100 rounded-full mb-2 group-hover:bg-teal-100 transition-colors">
                             <Upload className="h-5 w-5 text-slate-500 group-hover:text-teal-600" />
                           </div>
-                          <span className="text-sm font-medium text-slate-700">Upload ID Proof</span>
+                          <span className="text-sm font-medium text-slate-700">{files.governmentId ? files.governmentId.name : 'Upload ID Proof'}</span>
                           <span className="text-xs text-slate-400 mt-1">Max file size: 5MB</span>
-                        </div>
+                        </Label>
                       </div>
 
                       {/* Medical Degree */}
                       <div className="space-y-2">
                         <Label className="text-sm font-medium">Medical Degree <span className="text-red-500">*</span></Label>
-                        <div className="border-2 border-dashed border-slate-200 rounded-lg p-6 flex flex-col items-center justify-center text-center cursor-pointer hover:bg-teal-50 hover:border-teal-200 transition-colors group">
+                        <Label htmlFor="file-deg" className="border-2 border-dashed border-slate-200 rounded-lg p-6 flex flex-col items-center justify-center text-center cursor-pointer hover:bg-teal-50 hover:border-teal-200 transition-colors group">
+                          <input type="file" id="file-deg" className="hidden" onChange={(e) => handleFileChange(e, 'degreeCertificate')} />
                           <div className="p-2 bg-slate-100 rounded-full mb-2 group-hover:bg-teal-100 transition-colors">
                             <FileText className="h-5 w-5 text-slate-500 group-hover:text-teal-600" />
                           </div>
-                          <span className="text-sm font-medium text-slate-700">Upload Certificate</span>
+                          <span className="text-sm font-medium text-slate-700">{files.degreeCertificate ? files.degreeCertificate.name : 'Upload Certificate'}</span>
                           <span className="text-xs text-slate-400 mt-1">Max file size: 5MB</span>
-                        </div>
+                        </Label>
                       </div>
 
                       {/* Medical License */}
                       <div className="space-y-2">
                         <Label className="text-sm font-medium">Medical License Proof <span className="text-red-500">*</span></Label>
-                        <div className="border-2 border-dashed border-slate-200 rounded-lg p-6 flex flex-col items-center justify-center text-center cursor-pointer hover:bg-teal-50 hover:border-teal-200 transition-colors group">
+                        <Label htmlFor="file-lic" className="border-2 border-dashed border-slate-200 rounded-lg p-6 flex flex-col items-center justify-center text-center cursor-pointer hover:bg-teal-50 hover:border-teal-200 transition-colors group">
+                          <input type="file" id="file-lic" className="hidden" onChange={(e) => handleFileChange(e, 'medicalLicenseProof')} />
                           <div className="p-2 bg-slate-100 rounded-full mb-2 group-hover:bg-teal-100 transition-colors">
                             <FileText className="h-5 w-5 text-slate-500 group-hover:text-teal-600" />
                           </div>
-                          <span className="text-sm font-medium text-slate-700">Upload License</span>
+                          <span className="text-sm font-medium text-slate-700">{files.medicalLicenseProof ? files.medicalLicenseProof.name : 'Upload License'}</span>
                           <span className="text-xs text-slate-400 mt-1">Valid registration proof</span>
-                        </div>
+                        </Label>
                       </div>
 
                       {/* Profile Photo */}
                       <div className="space-y-2">
                         <Label className="text-sm font-medium">Profile Photo <span className="text-slate-400 font-normal">(Optional)</span></Label>
-                        <div className="border-2 border-dashed border-slate-200 rounded-lg p-6 flex flex-col items-center justify-center text-center cursor-pointer hover:bg-teal-50 hover:border-teal-200 transition-colors group">
+                        <Label htmlFor="file-pho" className="border-2 border-dashed border-slate-200 rounded-lg p-6 flex flex-col items-center justify-center text-center cursor-pointer hover:bg-teal-50 hover:border-teal-200 transition-colors group">
+                          <input type="file" id="file-pho" className="hidden" onChange={(e) => handleFileChange(e, 'profilePhoto')} />
                           <div className="p-2 bg-slate-100 rounded-full mb-2 group-hover:bg-teal-100 transition-colors">
                             <ImageIcon className="h-5 w-5 text-slate-500 group-hover:text-teal-600" />
                           </div>
-                          <span className="text-sm font-medium text-slate-700">Upload Photo</span>
+                          <span className="text-sm font-medium text-slate-700">{files.profilePhoto ? files.profilePhoto.name : 'Upload Photo'}</span>
                           <span className="text-xs text-slate-400 mt-1">Clear headshot</span>
-                        </div>
+                        </Label>
                       </div>
                     </div>
                   </div>
@@ -366,4 +442,3 @@ export default function RegisterPage() {
     </Suspense>
   )
 }
-

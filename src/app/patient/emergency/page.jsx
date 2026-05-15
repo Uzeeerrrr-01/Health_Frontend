@@ -1,8 +1,55 @@
+"use client"
+
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/Card"
 import { Button } from "@/components/ui/Button"
-import { Phone, MapPin, AlertCircle, HeartPulse, ShieldAlert, Navigation } from "lucide-react"
+import { Phone, MapPin, AlertCircle, HeartPulse, ShieldAlert, Navigation, Loader2 } from "lucide-react"
+import api from "@/lib/api"
 
 export default function EmergencySOS() {
+  const [user, setUser] = useState(null)
+  const [isAlerting, setIsAlerting] = useState(false)
+  const [hospitals, setHospitals] = useState([])
+  
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const storedUser = localStorage.getItem('user')
+      if (storedUser) {
+        const parsed = JSON.parse(storedUser)
+        setUser(parsed.user || parsed)
+      }
+    }
+  }, [])
+
+  const handleEmergencyAlert = async () => {
+    setIsAlerting(true)
+    try {
+      // Mock coordinates for demo (e.g. New York)
+      const latitude = 40.7128;
+      const longitude = -74.0060;
+      
+      const payload = {
+        symptoms: "Patient initiated Emergency SOS",
+        riskLevel: "High",
+        latitude,
+        longitude
+      }
+      
+      const res = await api.post('/emergency', payload)
+      if (res.data.success) {
+        alert("Emergency alert sent! Nearby doctors have been notified.")
+        if (res.data.mockHospitals) {
+          setHospitals(res.data.mockHospitals)
+        }
+      }
+    } catch (err) {
+      console.error("Failed to send emergency alert:", err)
+      alert("Failed to send emergency alert.")
+    } finally {
+      setIsAlerting(false)
+    }
+  }
+
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       <div className="text-center mb-8">
@@ -33,20 +80,49 @@ export default function EmergencySOS() {
           </CardContent>
         </Card>
 
-        {/* Nearest Hospital */}
+        {/* Nearest Hospital / SOS Alert */}
         <Card className="border-slate-200 shadow-sm overflow-hidden">
           <CardContent className="p-8 text-center flex flex-col items-center justify-center min-h-[250px]">
             <div className="h-16 w-16 bg-teal-100 rounded-full flex items-center justify-center mb-4">
               <MapPin className="h-8 w-8 text-teal-600" />
             </div>
-            <h2 className="text-2xl font-bold text-slate-900 mb-2">Nearest Hospital</h2>
-            <p className="text-slate-600 mb-6">Find emergency rooms near your current location.</p>
-            <Button size="lg" className="w-full bg-slate-900 hover:bg-slate-800 text-white text-lg h-14 shadow-md gap-2">
-              <Navigation className="h-5 w-5" /> Locate Hospitals
+            <h2 className="text-2xl font-bold text-slate-900 mb-2">Medical Alert</h2>
+            <p className="text-slate-600 mb-6">Notify nearby doctors and locate hospitals.</p>
+            <Button 
+              size="lg" 
+              onClick={handleEmergencyAlert} 
+              disabled={isAlerting}
+              className="w-full bg-slate-900 hover:bg-slate-800 text-white text-lg h-14 shadow-md gap-2"
+            >
+              {isAlerting ? <Loader2 className="h-5 w-5 animate-spin" /> : <Navigation className="h-5 w-5" />} 
+              {isAlerting ? "Alerting..." : "Send SOS & Locate"}
             </Button>
           </CardContent>
         </Card>
       </div>
+
+      {hospitals.length > 0 && (
+        <Card className="border-teal-200 shadow-sm">
+          <CardHeader>
+            <CardTitle>Nearby Hospitals</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {hospitals.map((h, i) => (
+              <div key={i} className="flex items-center justify-between p-4 border border-slate-200 rounded-lg bg-white">
+                <div>
+                  <p className="font-semibold text-slate-900">{h.name}</p>
+                  <p className="text-sm text-slate-500">{h.distance} km away</p>
+                </div>
+                <a href={`tel:${h.phone}`}>
+                  <Button variant="outline" size="sm" className="gap-2">
+                    <Phone className="h-4 w-4" /> Call
+                  </Button>
+                </a>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Emergency Contacts */}
       <Card>
@@ -61,11 +137,13 @@ export default function EmergencySOS() {
           <div className="flex items-center justify-between p-4 border border-slate-200 rounded-lg bg-white">
             <div className="flex items-center gap-4">
               <div className="h-10 w-10 bg-slate-100 rounded-full flex items-center justify-center">
-                <span className="font-semibold text-slate-600">JD</span>
+                <span className="font-semibold text-slate-600">
+                  {user?.emergencyContact ? user.emergencyContact.charAt(0).toUpperCase() : "EC"}
+                </span>
               </div>
               <div>
-                <p className="font-semibold text-slate-900">Jane Doe</p>
-                <p className="text-sm text-slate-500">Spouse</p>
+                <p className="font-semibold text-slate-900">{user?.emergencyContact || "No contact provided"}</p>
+                <p className="text-sm text-slate-500">Primary Contact</p>
               </div>
             </div>
             <div className="flex gap-2">
@@ -93,22 +171,26 @@ export default function EmergencySOS() {
               <p className="text-slate-400 text-sm">Vital information for first responders.</p>
             </div>
             <div className="px-3 py-1 bg-red-500/20 text-red-400 border border-red-500/30 rounded text-sm font-semibold">
-              O+ Blood Type
+              {user?.bloodGroup || "Unknown Blood Type"}
             </div>
           </div>
 
           <div className="grid sm:grid-cols-2 gap-6">
             <div>
               <p className="text-slate-400 text-sm mb-1">Severe Allergies</p>
-              <p className="font-medium text-red-400">Penicillin, Peanuts</p>
+              <p className="font-medium text-red-400">{user?.allergies || "None reported"}</p>
             </div>
             <div>
               <p className="text-slate-400 text-sm mb-1">Current Medications</p>
-              <p className="font-medium">Metformin (500mg)</p>
+              <p className="font-medium">{user?.currentMedications || "None"}</p>
             </div>
             <div>
               <p className="text-slate-400 text-sm mb-1">Medical Conditions</p>
-              <p className="font-medium">Type 2 Diabetes</p>
+              <p className="font-medium">{user?.previousDiseaseHistory || "None"}</p>
+            </div>
+            <div>
+              <p className="text-slate-400 text-sm mb-1">Family History</p>
+              <p className="font-medium">{user?.familyDiseaseHistory || "None"}</p>
             </div>
           </div>
         </CardContent>

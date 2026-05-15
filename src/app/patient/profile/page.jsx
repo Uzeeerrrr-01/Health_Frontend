@@ -1,13 +1,33 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/Card"
 import { Button } from "@/components/ui/Button"
 import { Input, Label } from "@/components/ui/Input"
-import { MOCK_USER } from "@/lib/mockData"
 import { User, Bell, Shield, Globe, Moon } from "lucide-react"
 
 export default function ProfileSettings() {
-  const user = MOCK_USER.patient
+  const [user, setUser] = useState({ name: "User", email: "" })
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('user')
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored)
+          const userData = parsed.user || parsed
+          setUser({
+            ...userData,
+            name: userData.fullName || userData.name || "User",
+            email: userData.email || "",
+            avatar: userData.avatar || ""
+          })
+        } catch (e) {
+          console.error("Failed to parse user from local storage")
+        }
+      }
+    }
+  }, [])
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
@@ -45,8 +65,12 @@ export default function ProfileSettings() {
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="flex items-center gap-6">
-                <div className="h-24 w-24 rounded-full overflow-hidden border-2 border-slate-100">
-                  <img src={user.avatar} alt={user.name} className="h-full w-full object-cover" />
+                <div className="h-24 w-24 rounded-full overflow-hidden border-2 border-slate-100 bg-teal-100 flex items-center justify-center">
+                  {user.avatar ? (
+                    <img src={user.avatar} alt={user.name} className="h-full w-full object-cover" />
+                  ) : (
+                    <User className="h-12 w-12 text-teal-600" />
+                  )}
                 </div>
                 <div>
                   <Button variant="outline" size="sm" className="mb-2 block">Change Photo</Button>
@@ -65,11 +89,11 @@ export default function ProfileSettings() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="phone">Phone Number</Label>
-                  <Input id="phone" type="tel" defaultValue="+1 (555) 000-0000" />
+                  <Input id="phone" type="tel" defaultValue={user.phone || ""} />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="dob">Date of Birth</Label>
-                  <Input id="dob" type="date" defaultValue="1992-05-15" />
+                  <Input id="dob" type="date" defaultValue={user.dob || ""} />
                 </div>
               </div>
 

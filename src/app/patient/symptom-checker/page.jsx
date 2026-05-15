@@ -6,55 +6,91 @@ import { Button } from "@/components/ui/Button"
 import { Card, CardContent } from "@/components/ui/Card"
 import { Activity, Plus, FileText, AlertCircle, Stethoscope, ChevronRight } from "lucide-react"
 import Link from "next/link"
+import api from "@/lib/api"
 
 export default function SymptomChecker() {
-  const [messages, setMessages] = useState([
+  const initialMessages = [
     {
       sender: "ai",
       content: "Hello! I'm your MediAI medical assistant. Please describe the symptoms you're experiencing, and I'll help you assess them.",
       options: ["I have a headache", "My stomach hurts", "I have a fever and cough"]
     }
-  ])
+  ]
+  const [messages, setMessages] = useState(initialMessages)
   const [isTyping, setIsTyping] = useState(false)
   const [showAnalysis, setShowAnalysis] = useState(false)
+  const [analysisData, setAnalysisData] = useState(null)
 
-  const handleSendMessage = (content) => {
+  const handleSendMessage = async (content) => {
     // Add user message
     const newMessages = [...messages, { sender: "user", content }]
     setMessages(newMessages)
     setIsTyping(true)
 
-    // Simulate AI response
-    setTimeout(() => {
-      setIsTyping(false)
-      if (newMessages.length === 2) {
-        setMessages(prev => [...prev, {
-          sender: "ai",
-          content: "I understand. How long have you been experiencing this, and is the pain/discomfort constant or does it come and go?",
-          options: ["Started today", "For a few days", "More than a week"]
-        }])
-      } else if (newMessages.length === 4) {
-        setMessages(prev => [...prev, {
-          sender: "ai",
-          content: "Thank you for the details. Based on your symptoms, I've generated an initial assessment. Please review the panel on the right.",
-        }])
-        setShowAnalysis(true)
+    // Prepare previous messages for API
+    const previousMessages = messages.map(m => ({
+      role: m.sender === 'ai' ? 'assistant' : 'user',
+      content: m.content
+    }))
+
+    try {
+      const res = await api.post('/ai/symptom-check', {
+        symptoms: content,
+        previousMessages
+      })
+
+      if (res.data.success && res.data.data) {
+        const aiResponse = res.data.data
+        
+        if (aiResponse.followUpQuestion) {
+          setMessages(prev => [...prev, {
+            sender: "ai",
+            content: aiResponse.followUpQuestion
+          }])
+        } else {
+          setMessages(prev => [...prev, {
+            sender: "ai",
+            content: "Thank you for the details. Based on your symptoms, I've generated an initial assessment. Please review the panel on the right.",
+          }])
+          setAnalysisData(aiResponse)
+          setShowAnalysis(true)
+        }
       } else {
-        setMessages(prev => [...prev, {
-          sender: "ai",
-          content: "I've updated your symptom profile. Is there anything else you'd like to add?",
-        }])
+        throw new Error("Invalid AI response")
       }
-    }, 1500)
+    } catch (error) {
+      console.error("AI check failed, using fallback:", error)
+      // Fallback for demo purposes if backend fails / no API key
+      setTimeout(() => {
+        if (newMessages.length === 2) {
+          setMessages(prev => [...prev, {
+            sender: "ai",
+            content: "I understand. How long have you been experiencing this, and is the pain/discomfort constant or does it come and go?",
+            options: ["Started today", "For a few days", "More than a week"]
+          }])
+        } else {
+          setMessages(prev => [...prev, {
+            sender: "ai",
+            content: "Thank you for the details. Based on your symptoms, I've generated an initial assessment. Please review the panel on the right.",
+          }])
+          setAnalysisData({
+            possibleCondition: "Viral Pharyngitis / Common Cold",
+            riskLevel: "Medium",
+            preventionAdvice: "Rest and stay hydrated. Over-the-counter pain relievers may help. Monitor symptoms.",
+            recommendedSpecialization: "General Physician"
+          })
+          setShowAnalysis(true)
+        }
+      }, 1000)
+    } finally {
+      setIsTyping(false)
+    }
   }
 
   const startNewChat = () => {
-    setMessages([{
-      sender: "ai",
-      content: "Hello! I'm your MediAI medical assistant. Please describe the symptoms you're experiencing.",
-      options: ["I have a headache", "My stomach hurts", "I have a fever and cough"]
-    }])
+    setMessages(initialMessages)
     setShowAnalysis(false)
+    setAnalysisData(null)
   }
 
   return (
@@ -76,16 +112,21 @@ export default function SymptomChecker() {
       </div>
 
       {/* Analysis Panel (Slide in) */}
-      {showAnalysis && (
+      {showAnalysis && analysisData && (
         <div className="w-full md:w-5/12 lg:w-4/12 h-full overflow-y-auto space-y-4 animate-in slide-in-from-right fade-in">
-          <Card className="border-amber-200 bg-amber-50">
+          <Card className={`border-${analysisData.riskLevel === 'High' || analysisData.riskLevel === 'Critical' ? 'red' : 'amber'}-200 bg-${analysisData.riskLevel === 'High' || analysisData.riskLevel === 'Critical' ? 'red' : 'amber'}-50`}>
             <CardContent className="p-4 flex gap-3">
-              <AlertCircle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+              <AlertCircle className={`h-5 w-5 text-${analysisData.riskLevel === 'High' || analysisData.riskLevel === 'Critical' ? 'red' : 'amber'}-600 shrink-0 mt-0.5`} />
               <div>
-                <h3 className="font-semibold text-amber-900 text-sm">Initial Assessment</h3>
-                <p className="text-xs text-amber-800 mt-1">
+                <h3 className={`font-semibold text-${analysisData.riskLevel === 'High' || analysisData.riskLevel === 'Critical' ? 'red' : 'amber'}-900 text-sm`}>Initial Assessment (Risk: {analysisData.riskLevel})</h3>
+                <p className={`text-xs text-${analysisData.riskLevel === 'High' || analysisData.riskLevel === 'Critical' ? 'red' : 'amber'}-800 mt-1`}>
                   This is an AI-generated assessment and not a definitive medical diagnosis. Please consult a doctor for confirmation.
                 </p>
+                {analysisData.emergencyWarning && (
+                  <p className="text-xs font-bold text-red-700 mt-2 bg-red-100 p-2 rounded">
+                    WARNING: {analysisData.emergencyWarning}
+                  </p>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -99,28 +140,14 @@ export default function SymptomChecker() {
               <div className="space-y-4">
                 <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
                   <div className="flex justify-between items-start mb-1">
-                    <span className="font-medium text-slate-900">Viral Pharyngitis</span>
-                    <span className="text-xs font-semibold bg-slate-200 text-slate-700 px-2 py-0.5 rounded">High Match</span>
+                    <span className="font-medium text-slate-900">{analysisData.possibleCondition}</span>
                   </div>
-                  <p className="text-xs text-slate-500">Inflammation of the back of the throat caused by a virus.</p>
-                </div>
-                
-                <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
-                  <div className="flex justify-between items-start mb-1">
-                    <span className="font-medium text-slate-900">Common Cold</span>
-                    <span className="text-xs font-semibold bg-slate-200 text-slate-700 px-2 py-0.5 rounded">Medium Match</span>
-                  </div>
-                  <p className="text-xs text-slate-500">A viral infection of your nose and throat (upper respiratory tract).</p>
                 </div>
               </div>
 
               <div className="mt-6">
                 <h4 className="text-sm font-medium text-slate-900 mb-2">Recommended Action</h4>
-                <ul className="text-sm text-slate-600 space-y-2 list-disc pl-4">
-                  <li>Rest and stay hydrated.</li>
-                  <li>Over-the-counter pain relievers may help with discomfort.</li>
-                  <li>Monitor symptoms. If fever exceeds 102°F (38.9°C), seek immediate medical attention.</li>
-                </ul>
+                <p className="text-sm text-slate-600">{analysisData.preventionAdvice}</p>
               </div>
             </CardContent>
           </Card>
@@ -131,7 +158,7 @@ export default function SymptomChecker() {
                 <Stethoscope className="h-5 w-5" /> Consult a Doctor
               </h3>
               <p className="text-teal-50 text-sm mb-4">
-                Based on your symptoms, we recommend consulting a General Physician. We can share this summary directly with them.
+                Based on your symptoms, we recommend consulting a {analysisData.recommendedSpecialization || 'General Physician'}.
               </p>
               <Link href="/patient/doctor-recommendation">
                 <Button className="w-full bg-white text-teal-600 hover:bg-teal-50 gap-2">
