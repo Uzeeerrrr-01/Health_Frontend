@@ -16,7 +16,7 @@ export default function LandingPage() {
           <nav className="hidden md:flex gap-6">
             <Link href="#features" className="text-sm font-medium text-slate-600 hover:text-slate-900">Features</Link>
             <Link href="#how-it-works" className="text-sm font-medium text-slate-600 hover:text-slate-900">How it Works</Link>
-            <Link href="#testimonials" className="text-sm font-medium text-slate-600 hover:text-slate-900">Testimonials</Link>
+            <Link href="/testimonials" className="text-sm font-medium text-slate-600 hover:text-slate-900">Testimonials</Link>
           </nav>
           <div className="flex items-center gap-4">
             <Link href="/auth/login">
