@@ -64,7 +64,8 @@ export default function SymptomChecker() {
       }
     } catch (error) {
       console.error("AI check failed:", error)
-      setError("I'm having trouble connecting to the medical brain right now. Please try again or consult a doctor if it's urgent.")
+      const errorMessage = error.message || "I'm having trouble connecting to the medical brain right now. Please try again or consult a doctor if it's urgent.";
+      setError(errorMessage)
       setMessages(prev => [...prev, {
         sender: "ai",
         content: "I apologize, but I encountered an error while analyzing your symptoms. Please check your connection or try again later.",
