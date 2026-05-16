@@ -164,7 +164,7 @@ export default function AppointmentsPage() {
               placeholder="Search doctor..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="h-10 w-full sm:w-64 rounded-md border border-slate-200 bg-white pl-9 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600 focus:border-transparent"
+              className="h-10 w-full sm:w-64 rounded-md border border-slate-200 bg-white pl-9 pr-4 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:border-transparent"
             />
           </div>
         </div>
@@ -261,7 +261,7 @@ export default function AppointmentsPage() {
               id="doctor"
               value={formData.doctor}
               onChange={(e) => setFormData({...formData, doctor: e.target.value})}
-              className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600"
+              className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600"
               required
             >
               <option value="" disabled>Select a doctor...</option>
@@ -300,7 +300,7 @@ export default function AppointmentsPage() {
               id="consultationType"
               value={formData.consultationType}
               onChange={(e) => setFormData({...formData, consultationType: e.target.value})}
-              className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600"
+              className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600"
             >
               <option value="video">Video Consultation</option>
               <option value="in-person">In-person Clinic Visit</option>

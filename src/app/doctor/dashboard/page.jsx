@@ -1,56 +1,105 @@
+"use client"
+
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/Card"
 import { StatCard } from "@/components/shared/StatCard"
 import { Badge } from "@/components/ui/Badge"
 import { Button } from "@/components/ui/Button"
-import { MOCK_USER, MOCK_PATIENT_QUEUE, MOCK_APPOINTMENTS } from "@/lib/mockData"
 import { Users, Calendar, FileText, AlertTriangle, ChevronRight, Activity, DollarSign } from "lucide-react"
 import Link from "next/link"
+import api from "@/lib/api"
 
 export default function DoctorDashboard() {
-  const doctor = MOCK_USER.doctor
-  const upcomingAppointments = MOCK_APPOINTMENTS.filter(a => a.status === "Upcoming")
+  const [doctor, setDoctor] = useState(null)
+  const [appointments, setAppointments] = useState([])
+  const [reports, setReports] = useState([])
+  const [isLoading, setIsLoading] = useState(true)
+
+  useEffect(() => {
+    const fetchDoctorData = async () => {
+      try {
+        if (typeof window !== 'undefined') {
+          const storedUser = localStorage.getItem('user')
+          if (storedUser) {
+            const parsedUser = JSON.parse(storedUser)
+            setDoctor(parsedUser.user || parsedUser)
+          }
+        }
+
+        const [apptsRes, repsRes] = await Promise.allSettled([
+          api.get('/appointments/doctor'),
+          api.get('/reports/doctor')
+        ])
+
+        if (apptsRes.status === 'fulfilled' && apptsRes.value.data.success) {
+          setAppointments(apptsRes.value.data.data)
+        }
+        if (repsRes.status === 'fulfilled' && repsRes.value.data.success) {
+          setReports(repsRes.value.data.data)
+        }
+      } catch (error) {
+        console.error("Failed to fetch doctor dashboard data", error)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    fetchDoctorData()
+  }, [])
+
+  const upcomingAppointments = appointments.filter(a => 
+    a.status === "Upcoming" || a.status === "scheduled" || a.status === "Scheduled" || a.status === "confirmed"
+  )
+
+  if (isLoading || !doctor) {
+    return (
+      <div className="flex flex-col h-[60vh] items-center justify-center space-y-4">
+        <div className="h-12 w-12 animate-spin rounded-full border-4 border-teal-600 border-t-transparent"></div>
+        <p className="text-slate-500 font-medium">Loading your doctor dashboard...</p>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">Doctor Dashboard</h1>
-          <p className="text-slate-500">Welcome back, {doctor.name}. Here's your overview for today.</p>
+          <p className="text-slate-500">Welcome back, Dr. {doctor.fullName || doctor.name}. Here's your overview for today.</p>
         </div>
-        {!doctor.verified && (
+        {doctor.verificationStatus !== 'approved' && (
           <Badge variant="warning" className="self-start sm:self-auto text-sm py-1.5 px-3">
-            <AlertTriangle className="h-4 w-4 mr-2" /> Pending Verification
+            <AlertTriangle className="h-4 w-4 mr-2" /> {doctor.verificationStatus === 'pending' ? 'Pending Verification' : 'Verification Issue'}
           </Badge>
         )}
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <StatCard
-          title="Total Patients"
-          value={doctor.patients}
+          title="Patients"
+          value={Array.from(new Set(appointments.map(a => a.patient?._id))).length}
           icon={Users}
           trend="up"
-          trendValue="12 this month"
+          trendValue="--"
         />
         <StatCard
           title="Today's Appointments"
-          value="8"
+          value={upcomingAppointments.filter(a => new Date(a.date).toDateString() === new Date().toDateString()).length}
           icon={Calendar}
-          description="3 completed, 5 pending"
+          description="Scheduled for today"
         />
         <StatCard
           title="Pending Reports"
-          value="4"
+          value={reports.filter(r => r.status === 'pending' || r.status === 'Under Doctor Review').length}
           icon={FileText}
-          description="Requires your verification"
+          description="Requires verification"
         />
         <StatCard
           title="Emergency Cases"
-          value="1"
+          value="0"
           icon={AlertTriangle}
-          trend="up"
-          trendValue="Requires attention"
-          className="border-red-200 bg-red-50/30"
+          trend="stable"
+          trendValue="None"
+          className="border-slate-200 bg-slate-50/30"
         />
       </div>
 
@@ -60,39 +109,44 @@ export default function DoctorDashboard() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
-                <CardTitle>Active Patient Queue</CardTitle>
-                <CardDescription>Patients waiting for online consultation.</CardDescription>
+                <CardTitle>Recent Patient Interactions</CardTitle>
+                <CardDescription>Patients from your recent appointments.</CardDescription>
               </div>
-              <Link href="/doctor/patient-queue">
-                <Button variant="ghost" size="sm" className="gap-1">
-                  View Queue <ChevronRight className="h-4 w-4" />
+              <Link href="/doctor/appointments">
+                <Button variant="ghost" size="sm" className="gap-1 text-teal-600">
+                  View All <ChevronRight className="h-4 w-4" />
                 </Button>
               </Link>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {MOCK_PATIENT_QUEUE.map((patient) => (
-                  <div key={patient.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 border border-slate-100 rounded-lg bg-slate-50 gap-4">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-1">
-                        <h4 className="font-semibold text-slate-900">{patient.patientName}</h4>
-                        <Badge variant={patient.risk === 'High' ? 'destructive' : patient.risk === 'Medium' ? 'warning' : 'success'}>
-                          {patient.risk} Risk
-                        </Badge>
+                {appointments.length > 0 ? (
+                  appointments.slice(0, 3).map((apt) => (
+                    <div key={apt._id} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 border border-slate-100 rounded-lg bg-slate-50 gap-4">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3 mb-1">
+                          <h4 className="font-semibold text-slate-900">{apt.patient?.fullName || "Patient"}</h4>
+                          <Badge variant={apt.status === 'confirmed' ? 'success' : 'secondary'}>
+                            {apt.status}
+                          </Badge>
+                        </div>
+                        <div className="flex items-start gap-2 text-sm text-slate-600">
+                          <p>{apt.reason || "General Consultation"}</p>
+                        </div>
                       </div>
-                      <div className="flex items-start gap-2 text-sm text-slate-600 bg-white p-2 rounded-md border border-slate-100">
-                        <Activity className="h-4 w-4 text-teal-600 mt-0.5 shrink-0" />
-                        <p>{patient.symptomSummary}</p>
+                      <div className="flex flex-row sm:flex-col items-center sm:items-end justify-between sm:justify-center gap-2 min-w-[120px]">
+                        <span className="text-xs font-medium text-slate-500">{apt.time}</span>
+                        <Link href="/doctor/chat">
+                          <Button size="sm" className="w-full bg-teal-600 hover:bg-teal-700">Open Chat</Button>
+                        </Link>
                       </div>
                     </div>
-                    <div className="flex flex-row sm:flex-col items-center sm:items-end justify-between sm:justify-center gap-2 min-w-[120px]">
-                      <span className="text-xs font-medium text-slate-500">Wait: {patient.waitTime}</span>
-                      <Link href="/doctor/chat">
-                        <Button size="sm" className="w-full">Accept</Button>
-                      </Link>
-                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-8 border border-dashed rounded-lg">
+                    <p className="text-sm text-slate-500">No recent patient interactions</p>
                   </div>
-                ))}
+                )}
               </div>
             </CardContent>
           </Card>
@@ -102,17 +156,13 @@ export default function DoctorDashboard() {
             <CardHeader>
               <CardTitle>Consultation Activity</CardTitle>
             </CardHeader>
-            <CardContent className="flex items-end gap-2 h-[200px] mt-4 px-6 pb-2">
+            <CardContent className="flex items-end gap-2 h-[180px] mt-4 px-6 pb-2">
                {[60, 80, 50, 100, 75, 40, 90].map((height, i) => (
                 <div key={i} className="flex-1 flex flex-col items-center justify-end gap-2">
                   <div 
                     className="w-full bg-teal-600 rounded-t-md hover:bg-teal-700 transition-colors relative group cursor-pointer"
                     style={{ height: `${height}%` }}
-                  >
-                    <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-xs py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity">
-                      {height}
-                    </div>
-                  </div>
+                  />
                   <span className="text-xs text-slate-500">
                     {['M', 'T', 'W', 'T', 'F', 'S', 'S'][i]}
                   </span>
@@ -133,21 +183,25 @@ export default function DoctorDashboard() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {upcomingAppointments.map((apt) => (
-                  <div key={apt.id} className="flex gap-4">
-                    <div className="w-16 text-right">
-                      <p className="text-sm font-bold text-slate-900">{apt.time.split(' ')[0]}</p>
-                      <p className="text-[10px] font-medium text-slate-500">{apt.time.split(' ')[1]}</p>
+                {upcomingAppointments.length > 0 ? (
+                  upcomingAppointments.slice(0, 5).map((apt) => (
+                    <div key={apt._id} className="flex gap-4">
+                      <div className="w-16 text-right">
+                        <p className="text-sm font-bold text-slate-900">{apt.time.split(' ')[0]}</p>
+                        <p className="text-[10px] font-medium text-slate-500">{apt.time.split(' ')[1]}</p>
+                      </div>
+                      <div className="flex-1 border-l-2 border-teal-200 pl-4 pb-4">
+                        <p className="font-semibold text-slate-900 text-sm">{apt.patient?.fullName || "Patient"}</p>
+                        <p className="text-xs text-slate-500 mb-2">{apt.consultationType || "Visit"}</p>
+                        <Link href="/doctor/chat">
+                          <Button variant="outline" size="sm" className="h-7 text-xs px-2 w-full border-teal-200 text-teal-700 hover:bg-teal-50">Start Consultation</Button>
+                        </Link>
+                      </div>
                     </div>
-                    <div className="flex-1 border-l-2 border-teal-200 pl-4 pb-4">
-                      <p className="font-semibold text-slate-900 text-sm">{apt.patientName}</p>
-                      <p className="text-xs text-slate-500 mb-2">{apt.type}</p>
-                      <Link href="/doctor/chat">
-                        <Button variant="outline" size="sm" className="h-7 text-xs px-2 w-full">Start</Button>
-                      </Link>
-                    </div>
-                  </div>
-                ))}
+                  ))
+                ) : (
+                  <p className="text-sm text-slate-500 text-center py-4">No appointments for today</p>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -155,14 +209,14 @@ export default function DoctorDashboard() {
           <Card className="bg-teal-900 text-white border-transparent">
             <CardContent className="p-6">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="font-semibold text-teal-50">Earnings this Week</h3>
+                <h3 className="font-semibold text-teal-50">Earnings</h3>
                 <DollarSign className="h-5 w-5 text-teal-300" />
               </div>
-              <p className="text-3xl font-bold mb-1">$1,240.00</p>
-              <p className="text-sm text-teal-300">+15% from last week</p>
+              <p className="text-3xl font-bold mb-1">$0.00</p>
+              <p className="text-sm text-teal-300">Start consultations to earn</p>
               
               <Link href="/doctor/earnings">
-                <Button className="w-full mt-6 bg-white text-teal-900 hover:bg-teal-50">View Details</Button>
+                <Button className="w-full mt-6 bg-white text-teal-900 hover:bg-teal-50">View Wallet</Button>
               </Link>
             </CardContent>
           </Card>

@@ -1,11 +1,92 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/Card"
 import { Badge } from "@/components/ui/Badge"
 import { Button } from "@/components/ui/Button"
 import { FileText, CheckCircle2, XCircle, PenTool, AlertCircle, Clock } from "lucide-react"
+import api from "@/lib/api"
+import { toast } from "react-hot-toast"
 
 export default function ReportVerification() {
+  const [reports, setReports] = useState([])
+  const [selectedReport, setSelectedReport] = useState(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [formData, setFormData] = useState({
+    title: "",
+    content: "",
+    assessment: "",
+    plan: ""
+  })
+
+  useEffect(() => {
+    const fetchPendingReports = async () => {
+      try {
+        const res = await api.get('/reports/doctor')
+        if (res.data.success) {
+          const pending = res.data.data.filter(r => r.status === 'pending' || r.status === 'Under Doctor Review' || r.status === 'Draft by AI')
+          setReports(pending)
+          if (pending.length > 0) {
+            handleSelectReport(pending[0])
+          }
+        }
+      } catch (err) {
+        console.error("Failed to fetch pending reports:", err)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    fetchPendingReports()
+  }, [])
+
+  const handleSelectReport = (report) => {
+    setSelectedReport(report)
+    setFormData({
+      title: report.title || "",
+      content: report.content || "",
+      assessment: report.assessment || "",
+      plan: report.plan || ""
+    })
+  }
+
+  const handleAction = async (status) => {
+    if (!selectedReport) return
+    
+    try {
+      setIsSubmitting(true)
+      const res = await api.put(`/reports/${selectedReport._id}`, {
+        ...formData,
+        status: status === 'approve' ? 'Approved' : 'Rejected'
+      })
+      
+      if (res.data.success) {
+        toast.success(`Report ${status === 'approve' ? 'approved' : 'rejected'} successfully`)
+        const updatedReports = reports.filter(r => r._id !== selectedReport._id)
+        setReports(updatedReports)
+        if (updatedReports.length > 0) {
+          handleSelectReport(updatedReports[0])
+        } else {
+          setSelectedReport(null)
+        }
+      }
+    } catch (err) {
+      console.error("Failed to update report status:", err)
+      toast.error("Failed to update report")
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col h-[60vh] items-center justify-center space-y-4">
+        <div className="h-12 w-12 animate-spin rounded-full border-4 border-teal-600 border-t-transparent"></div>
+        <p className="text-slate-500 font-medium">Loading pending verifications...</p>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -14,126 +95,136 @@ export default function ReportVerification() {
           <p className="text-slate-500">Review and digitally sign AI-generated clinical notes before sending to patients.</p>
         </div>
         <div className="flex gap-2">
-          <Badge variant="outline" className="bg-white py-1.5 px-3">
-            <Clock className="h-4 w-4 mr-2 text-amber-500" /> 4 Pending
+          <Badge variant="outline" className="bg-white py-1.5 px-3 border-teal-200 text-teal-700">
+            <Clock className="h-4 w-4 mr-2" /> {reports.length} Pending
           </Badge>
         </div>
       </div>
 
-      <div className="grid lg:grid-cols-3 gap-6">
-        {/* Pending List Sidebar */}
-        <div className="lg:col-span-1 space-y-4">
-          <div className="space-y-3">
-            {/* Active Item */}
-            <div className="p-4 bg-white border-2 border-teal-600 rounded-xl shadow-sm cursor-pointer relative overflow-hidden">
-              <div className="absolute top-0 left-0 w-1 h-full bg-teal-600"></div>
-              <h3 className="font-semibold text-slate-900 mb-1">John Doe</h3>
-              <p className="text-xs font-medium text-slate-500 mb-3">Consultation: Today, 10:30 AM</p>
-              <div className="flex items-center justify-between">
-                <Badge className="bg-slate-100 text-slate-700 hover:bg-slate-200">Clinical Note</Badge>
-                <span className="text-xs text-teal-600 font-medium flex items-center gap-1">
-                  <FileText className="h-3 w-3" /> AI Draft Ready
-                </span>
-              </div>
-            </div>
-
-            {/* Inactive Items */}
-            <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl cursor-pointer hover:border-slate-300 transition-colors">
-              <h3 className="font-semibold text-slate-700 mb-1">Alice Brown</h3>
-              <p className="text-xs font-medium text-slate-500 mb-3">Consultation: Yesterday, 4:15 PM</p>
-              <div className="flex items-center justify-between">
-                <Badge variant="outline">Prescription</Badge>
-              </div>
-            </div>
-
-            <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl cursor-pointer hover:border-slate-300 transition-colors">
-              <h3 className="font-semibold text-slate-700 mb-1">Robert Wilson</h3>
-              <p className="text-xs font-medium text-slate-500 mb-3">Lab Review: Today, 09:00 AM</p>
-              <div className="flex items-center justify-between">
-                <Badge variant="outline">Lab Summary</Badge>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Editor Area */}
-        <div className="lg:col-span-2">
-          <Card className="h-full flex flex-col shadow-md border-slate-200">
-            <CardHeader className="border-b border-slate-100 bg-slate-50/50 pb-4">
-              <div className="flex items-center justify-between mb-2">
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <PenTool className="h-5 w-5 text-teal-600" />
-                  Clinical Note Draft
-                </CardTitle>
-                <Badge className="bg-indigo-50 text-indigo-700 border-indigo-200">AI Generated</Badge>
-              </div>
-              <CardDescription className="flex gap-4 text-sm font-medium">
-                <span>Patient: <span className="text-slate-900">John Doe</span></span>
-                <span>ID: <span className="text-slate-900">JD-2941</span></span>
-                <span>Date: <span className="text-slate-900">May 14, 2026</span></span>
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex-1 p-6 space-y-6 bg-white">
-              <div className="bg-teal-50/50 p-4 rounded-lg border border-teal-100 text-sm text-teal-800 flex gap-3 mb-4">
-                <AlertCircle className="h-5 w-5 shrink-0" />
-                <p>This draft was generated from the consultation transcript. Please verify all clinical facts, diagnoses, and medication dosages before signing.</p>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-bold text-slate-900 uppercase tracking-wider">Chief Complaint</label>
-                <textarea 
-                  className="w-full p-3 rounded-md border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600 resize-none h-20 text-slate-800 bg-slate-50 hover:bg-white transition-colors"
-                  defaultValue="Patient reported chest tightness starting 2 days ago. No associated shortness of breath, diaphoresis, or radiating pain."
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-bold text-slate-900 uppercase tracking-wider">History of Present Illness (HPI)</label>
-                <textarea 
-                  className="w-full p-3 rounded-md border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600 resize-none h-28 text-slate-800 bg-slate-50 hover:bg-white transition-colors"
-                  defaultValue="34-year-old male with a history of hypertension presents via online consultation with localized chest discomfort. Pain is reproducible on palpation (based on patient self-assessment during call) and worsens with deep inspiration."
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-bold text-slate-900 uppercase tracking-wider">Assessment / Diagnosis</label>
-                <textarea 
-                  className="w-full p-3 rounded-md border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600 resize-none h-16 text-slate-800 bg-slate-50 hover:bg-white transition-colors border-l-4 border-l-amber-400"
-                  defaultValue="Suspected Costochondritis. Low suspicion for acute coronary syndrome given presentation and age."
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-bold text-slate-900 uppercase tracking-wider">Plan</label>
-                <textarea 
-                  className="w-full p-3 rounded-md border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600 resize-none h-24 text-slate-800 bg-slate-50 hover:bg-white transition-colors"
-                  defaultValue="1. Prescribed Ibuprofen 400mg PO PRN for pain.
-2. Rest and avoid heavy lifting for 1 week.
-3. Patient advised to go to ER immediately if pain worsens or shortness of breath develops.
-4. Follow-up consultation in 7 days."
-                />
-              </div>
-
-              <div className="pt-4 border-t border-slate-200">
-                <div className="flex items-center gap-3 bg-slate-50 p-4 rounded-lg border border-slate-200">
-                  <input type="checkbox" id="sign" className="h-5 w-5 rounded border-slate-300 text-teal-600 focus:ring-teal-600 cursor-pointer" />
-                  <label htmlFor="sign" className="text-sm font-medium text-slate-900 cursor-pointer">
-                    I verify that I have reviewed this document and apply my digital signature.
-                  </label>
+      {reports.length > 0 ? (
+        <div className="grid lg:grid-cols-3 gap-6">
+          {/* Pending List Sidebar */}
+          <div className="lg:col-span-1 space-y-3">
+            {reports.map((report) => (
+              <div 
+                key={report._id}
+                onClick={() => handleSelectReport(report)}
+                className={`p-4 rounded-xl cursor-pointer transition-all border-2 relative overflow-hidden ${
+                  selectedReport?._id === report._id 
+                  ? 'bg-white border-teal-600 shadow-md' 
+                  : 'bg-slate-50 border-slate-200 hover:border-slate-300'
+                }`}
+              >
+                {selectedReport?._id === report._id && <div className="absolute top-0 left-0 w-1 h-full bg-teal-600"></div>}
+                <h3 className="font-semibold text-slate-900 mb-1">{report.patient?.fullName || "Unknown Patient"}</h3>
+                <p className="text-xs font-medium text-slate-500 mb-3">Created: {new Date(report.createdAt).toLocaleDateString()}</p>
+                <div className="flex items-center justify-between">
+                  <Badge variant="outline" className="text-[10px]">{report.reportType || "Clinical Note"}</Badge>
+                  <span className="text-[10px] text-teal-600 font-bold flex items-center gap-1 uppercase">
+                    <FileText className="h-3 w-3" /> Draft Ready
+                  </span>
                 </div>
               </div>
-            </CardContent>
-            <CardFooter className="bg-slate-50 border-t border-slate-200 p-4 flex justify-between">
-              <Button variant="danger" className="bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 gap-2">
-                <XCircle className="h-4 w-4" /> Reject Draft
-              </Button>
-              <Button className="bg-teal-600 hover:bg-teal-700 gap-2 px-8">
-                <CheckCircle2 className="h-4 w-4" /> Approve & Send to Patient
-              </Button>
-            </CardFooter>
-          </Card>
+            ))}
+          </div>
+
+          {/* Editor Area */}
+          <div className="lg:col-span-2">
+            <Card className="h-full flex flex-col shadow-md border-slate-200">
+              <CardHeader className="border-b border-slate-100 bg-slate-50/50 pb-4">
+                <div className="flex items-center justify-between mb-2">
+                  <CardTitle className="text-lg flex items-center gap-2 text-slate-900">
+                    <PenTool className="h-5 w-5 text-teal-600" />
+                    Reviewing: {formData.title || "Clinical Note"}
+                  </CardTitle>
+                  <Badge className="bg-indigo-50 text-indigo-700 border-indigo-200">AI Assisted</Badge>
+                </div>
+                <CardDescription className="flex gap-4 text-sm font-medium">
+                  <span>Patient: <span className="text-slate-900">{selectedReport?.patient?.fullName}</span></span>
+                  <span>Date: <span className="text-slate-900">{new Date(selectedReport?.createdAt).toLocaleDateString()}</span></span>
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="flex-1 p-6 space-y-6 bg-white">
+                <div className="bg-teal-50 p-4 rounded-lg border border-teal-100 text-sm text-teal-800 flex gap-3">
+                  <AlertCircle className="h-5 w-5 shrink-0" />
+                  <p>Please verify all clinical facts and medication dosages before signing. AI drafts may require adjustments.</p>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Report Title</label>
+                  <input 
+                    className="w-full p-3 rounded-md border border-slate-200 text-sm focus:ring-2 focus:ring-teal-600 outline-none text-slate-900"
+                    value={formData.title}
+                    onChange={(e) => setFormData({...formData, title: e.target.value})}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Observations / Findings</label>
+                  <textarea 
+                    className="w-full p-3 rounded-md border border-slate-200 text-sm focus:ring-2 focus:ring-teal-600 outline-none h-32 text-slate-800"
+                    value={formData.content}
+                    onChange={(e) => setFormData({...formData, content: e.target.value})}
+                  />
+                </div>
+
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Assessment</label>
+                    <textarea 
+                      className="w-full p-3 rounded-md border border-slate-200 text-sm focus:ring-2 focus:ring-teal-600 outline-none h-24 text-slate-800"
+                      value={formData.assessment}
+                      onChange={(e) => setFormData({...formData, assessment: e.target.value})}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Plan / Treatment</label>
+                    <textarea 
+                      className="w-full p-3 rounded-md border border-slate-200 text-sm focus:ring-2 focus:ring-teal-600 outline-none h-24 text-slate-800"
+                      value={formData.plan}
+                      onChange={(e) => setFormData({...formData, plan: e.target.value})}
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t border-slate-100">
+                  <div className="flex items-center gap-3 bg-slate-50 p-4 rounded-lg border border-slate-200">
+                    <input type="checkbox" id="sign" className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-600 cursor-pointer" />
+                    <label htmlFor="sign" className="text-sm font-medium text-slate-700 cursor-pointer">
+                      I verify that I have reviewed this document and apply my digital signature.
+                    </label>
+                  </div>
+                </div>
+              </CardContent>
+              <CardFooter className="bg-slate-50 border-t border-slate-200 p-4 flex justify-between gap-4">
+                <Button 
+                  variant="outline" 
+                  disabled={isSubmitting}
+                  onClick={() => handleAction('reject')}
+                  className="text-red-600 border-red-200 hover:bg-red-50 gap-2 flex-1 sm:flex-none"
+                >
+                  <XCircle className="h-4 w-4" /> Reject Draft
+                </Button>
+                <Button 
+                  disabled={isSubmitting}
+                  onClick={() => handleAction('approve')}
+                  className="bg-teal-600 hover:bg-teal-700 gap-2 px-8 flex-1 sm:flex-none text-white"
+                >
+                  <CheckCircle2 className="h-4 w-4" /> {isSubmitting ? "Processing..." : "Approve & Send"}
+                </Button>
+              </CardFooter>
+            </Card>
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="text-center py-24 bg-white border border-slate-200 rounded-2xl border-dashed">
+          <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-slate-50 mb-4 text-slate-400">
+            <CheckCircle2 className="h-8 w-8" />
+          </div>
+          <h3 className="text-xl font-semibold text-slate-900 mb-2">All Caught Up!</h3>
+          <p className="text-slate-500">There are no reports pending your verification at this time.</p>
+        </div>
+      )}
     </div>
   )
 }

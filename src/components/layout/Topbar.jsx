@@ -3,12 +3,11 @@
 import { useState, useEffect } from "react"
 import { Bell, Search, User, LogOut } from "lucide-react"
 import { Input } from "@/components/ui/Input"
-import { MOCK_USER } from "@/lib/mockData"
 import Link from "next/link"
 import api from "@/lib/api"
 
 export function Topbar({ role }) {
-  const [user, setUser] = useState(MOCK_USER[role] || { name: "User" })
+  const [user, setUser] = useState({ name: "User" })
   const [unreadCount, setUnreadCount] = useState(0)
 
   useEffect(() => {

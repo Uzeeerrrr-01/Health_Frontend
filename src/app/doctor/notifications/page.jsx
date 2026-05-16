@@ -1,9 +1,57 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import { Card, CardContent } from "@/components/ui/Card"
-import { Bell, AlertTriangle } from "lucide-react"
+import { Bell, AlertTriangle, Calendar, CheckCircle2, MessageSquare } from "lucide-react"
+import api from "@/lib/api"
 
 export default function DoctorNotifications() {
+  const [notifications, setNotifications] = useState([])
+  const [isLoading, setIsLoading] = useState(true)
+
+  useEffect(() => {
+    const fetchNotifications = async () => {
+      try {
+        const res = await api.get('/notifications')
+        if (res.data.success) {
+          setNotifications(res.data.data)
+        }
+      } catch (err) {
+        console.error("Failed to fetch notifications:", err)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    fetchNotifications()
+  }, [])
+
+  const getIcon = (type) => {
+    switch (type) {
+      case 'emergency': return <AlertTriangle className="h-5 w-5 text-red-600" />
+      case 'appointment': return <Calendar className="h-5 w-5 text-teal-600" />
+      case 'verification': return <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+      case 'message': return <MessageSquare className="h-5 w-5 text-indigo-600" />
+      default: return <Bell className="h-5 w-5 text-slate-600" />
+    }
+  }
+
+  const getBgColor = (type) => {
+    switch (type) {
+      case 'emergency': return 'bg-red-50 border-red-100'
+      case 'appointment': return 'bg-teal-50 border-teal-100'
+      default: return 'bg-white border-slate-200'
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col h-[60vh] items-center justify-center space-y-4">
+        <div className="h-12 w-12 animate-spin rounded-full border-4 border-teal-600 border-t-transparent"></div>
+        <p className="text-slate-500 font-medium">Loading notifications...</p>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -12,23 +60,27 @@ export default function DoctorNotifications() {
       </div>
       
       <div className="space-y-4 max-w-3xl">
-        <div className="flex items-start gap-4 p-4 bg-red-50 border border-red-100 rounded-xl">
-          <div className="p-2 bg-white rounded-full"><AlertTriangle className="h-5 w-5 text-red-600" /></div>
-          <div>
-            <h4 className="font-semibold text-red-900">Emergency Alert in Queue</h4>
-            <p className="text-sm text-red-700 mt-1">A patient with high-risk symptoms has just joined your queue.</p>
-            <p className="text-xs text-red-500 mt-2">Just now</p>
+        {notifications.length > 0 ? (
+          notifications.map((note) => (
+            <div key={note._id} className={`flex items-start gap-4 p-4 border rounded-xl transition-shadow hover:shadow-sm ${getBgColor(note.type)}`}>
+              <div className="p-2 bg-white rounded-full shadow-sm border border-slate-100">{getIcon(note.type)}</div>
+              <div className="flex-1">
+                <h4 className={`font-semibold ${note.type === 'emergency' ? 'text-red-900' : 'text-slate-900'}`}>{note.title}</h4>
+                <p className={`text-sm mt-1 ${note.type === 'emergency' ? 'text-red-700' : 'text-slate-600'}`}>{note.message}</p>
+                <p className="text-[10px] text-slate-500 mt-2 font-medium uppercase tracking-wider">{new Date(note.createdAt).toLocaleString()}</p>
+              </div>
+              {!note.read && <div className="h-2 w-2 rounded-full bg-teal-500 mt-2"></div>}
+            </div>
+          ))
+        ) : (
+          <div className="text-center py-16 bg-white border border-slate-200 rounded-2xl border-dashed">
+            <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-slate-50 mb-4">
+              <Bell className="h-8 w-8 text-slate-400" />
+            </div>
+            <h3 className="text-xl font-medium text-slate-900 mb-2">No new notifications</h3>
+            <p className="text-slate-500">We'll alert you when something important happens.</p>
           </div>
-        </div>
-        
-        <div className="flex items-start gap-4 p-4 bg-white border border-slate-200 rounded-xl">
-          <div className="p-2 bg-slate-50 rounded-full"><Bell className="h-5 w-5 text-slate-600" /></div>
-          <div>
-            <h4 className="font-semibold text-slate-900">New Appointment Booked</h4>
-            <p className="text-sm text-slate-600 mt-1">Alice Brown booked a slot for Tomorrow at 10:00 AM.</p>
-            <p className="text-xs text-slate-500 mt-2">2 hours ago</p>
-          </div>
-        </div>
+        )}
       </div>
     </div>
   )

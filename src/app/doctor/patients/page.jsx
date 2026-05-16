@@ -17,7 +17,7 @@ export default function DoctorPatients() {
         <input 
           type="text" 
           placeholder="Search patients by name or ID..." 
-          className="h-10 w-full rounded-md border border-slate-200 bg-white pl-9 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600 focus:border-transparent"
+          className="h-10 w-full rounded-md border border-slate-200 bg-white pl-9 pr-4 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:border-transparent"
         />
       </div>
 

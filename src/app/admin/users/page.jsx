@@ -65,24 +65,41 @@ export default function AdminUsers() {
   }
 
   const handleOpenAdd = () => {
-    setFormData({ fullName: "", email: "", phone: "", age: "", sex: "Male", bloodGroup: "", allergies: "", currentMedications: "", previousDiseaseHistory: "", familyDiseaseHistory: "", emergencyContact: "", accountStatus: "active" })
+    setFormData({ 
+      fullName: "", email: "", password: "password123", phone: "", age: "", sex: "Male", 
+      bloodGroup: "", allergies: "", currentMedications: "", 
+      previousDiseaseHistory: "", familyDiseaseHistory: "", 
+      emergencyContact: "", accountStatus: "active" 
+    })
     setSelectedUser(null)
     setIsFormModalOpen(true)
   }
 
   const handleOpenEdit = (user) => {
+    // Convert arrays to comma-separated strings for the form
+    const formatArray = (arr) => Array.isArray(arr) ? arr.join(', ') : (arr || "");
+    
+    // Convert emergencyContact object to string for the form
+    const formatEC = (ec) => {
+      if (typeof ec === 'object' && ec !== null) {
+        return `${ec.name || ""}${ec.phone ? ", " + ec.phone : ""}${ec.relation ? ", " + ec.relation : ""}`;
+      }
+      return ec || "";
+    };
+
     setFormData({
       fullName: user.fullName || "",
       email: user.email || "",
+      password: "", // Don't show password for existing users
       phone: user.phone || "",
       age: user.age || "",
       sex: user.sex || "Male",
       bloodGroup: user.bloodGroup || "",
-      allergies: user.allergies || "",
-      currentMedications: user.currentMedications || "",
-      previousDiseaseHistory: user.previousDiseaseHistory || "",
-      familyDiseaseHistory: user.familyDiseaseHistory || "",
-      emergencyContact: user.emergencyContact || "",
+      allergies: formatArray(user.allergies),
+      currentMedications: formatArray(user.currentMedications),
+      previousDiseaseHistory: formatArray(user.previousDiseaseHistory),
+      familyDiseaseHistory: formatArray(user.familyDiseaseHistory),
+      emergencyContact: formatEC(user.emergencyContact),
       accountStatus: user.accountStatus || "active"
     })
     setSelectedUser(user)
@@ -102,23 +119,53 @@ export default function AdminUsers() {
   const handleSaveUser = async (e) => {
     e.preventDefault()
     try {
-      if (selectedUser) {
-        await api.put(`/admin/users/${selectedUser._id}`, formData)
-      } else {
-        await api.post('/admin/users', formData)
+      // Process strings back into arrays/objects
+      const processArray = (str) => typeof str === 'string' ? str.split(',').map(s => s.trim()).filter(s => s !== "") : str;
+      
+      const processedData = {
+        ...formData,
+        allergies: processArray(formData.allergies),
+        currentMedications: processArray(formData.currentMedications),
+        previousDiseaseHistory: processArray(formData.previousDiseaseHistory),
+        familyDiseaseHistory: processArray(formData.familyDiseaseHistory),
+      };
+
+      // Process emergency contact (expecting "Name, Phone, Relation")
+      if (typeof formData.emergencyContact === 'string' && formData.emergencyContact.includes(',')) {
+        const parts = formData.emergencyContact.split(',').map(p => p.trim());
+        processedData.emergencyContact = {
+          name: parts[0] || "",
+          phone: parts[1] || "",
+          relation: parts[2] || ""
+        };
+      } else if (typeof formData.emergencyContact === 'string') {
+        processedData.emergencyContact = { name: formData.emergencyContact, phone: "", relation: "" };
       }
-      fetchUsers()
+
+      // If editing, remove password if empty
+      if (selectedUser && !processedData.password) {
+        delete processedData.password;
+      }
+
+      if (selectedUser) {
+        await api.put(`/admin/users/${selectedUser._id}`, processedData)
+      } else {
+        await api.post('/admin/users', processedData)
+      }
+      
+      await fetchUsers()
       setIsFormModalOpen(false)
     } catch (err) {
       console.error("Failed to save user", err)
-      alert("Failed to save user. Please try again.")
+      const errorMsg = err.response?.data?.message || err.message || "Failed to save user.";
+      alert(errorMsg)
     }
   }
 
   const handleDeleteUser = async () => {
     try {
       await api.delete(`/admin/users/${selectedUser._id}`)
-      fetchUsers()
+      await fetchUsers()
       setIsDeleteModalOpen(false)
     } catch (err) {
       console.error("Failed to delete user", err)
@@ -129,11 +176,12 @@ export default function AdminUsers() {
   const handleToggleStatus = async (user) => {
     try {
       await api.put(`/admin/users/${user._id}/status`)
-      fetchUsers()
+      await fetchUsers()
     } catch (err) {
       console.error("Failed to toggle status", err)
     }
   }
+
 
   const getStatusBadgeVariant = (user) => {
     if (user.accountStatus === 'suspended') return "destructive"
@@ -316,6 +364,12 @@ export default function AdminUsers() {
               <Label htmlFor="email" className="text-slate-700">Email</Label>
               <Input id="email" type="email" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} required className="text-slate-900" />
             </div>
+            {!selectedUser && (
+              <div className="space-y-2">
+                <Label htmlFor="password" className="text-slate-700">Password</Label>
+                <Input id="password" type="password" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} required className="text-slate-900" />
+              </div>
+            )}
             <div className="space-y-2">
               <Label htmlFor="phone" className="text-slate-700">Phone</Label>
               <Input id="phone" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} className="text-slate-900" />
@@ -342,8 +396,8 @@ export default function AdminUsers() {
               <Input id="bloodGroup" value={formData.bloodGroup} onChange={e => setFormData({...formData, bloodGroup: e.target.value})} className="text-slate-900" />
             </div>
             <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="allergies" className="text-slate-700">Allergies</Label>
-              <Input id="allergies" value={formData.allergies} onChange={e => setFormData({...formData, allergies: e.target.value})} className="text-slate-900" />
+              <Label htmlFor="allergies" className="text-slate-700">Allergies (comma separated)</Label>
+              <Input id="allergies" placeholder="Peanuts, Dust, etc." value={formData.allergies} onChange={e => setFormData({...formData, allergies: e.target.value})} className="text-slate-900" />
             </div>
             <div className="space-y-2 sm:col-span-2">
               <Label htmlFor="currentMedications" className="text-slate-700">Current Medications</Label>
@@ -358,8 +412,8 @@ export default function AdminUsers() {
               <Input id="familyDiseaseHistory" value={formData.familyDiseaseHistory} onChange={e => setFormData({...formData, familyDiseaseHistory: e.target.value})} className="text-slate-900" />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="emergencyContact" className="text-slate-700">Emergency Contact</Label>
-              <Input id="emergencyContact" value={formData.emergencyContact} onChange={e => setFormData({...formData, emergencyContact: e.target.value})} className="text-slate-900" />
+              <Label htmlFor="emergencyContact" className="text-slate-700">Emergency Contact (Name, Phone, Relation)</Label>
+              <Input id="emergencyContact" placeholder="John Doe, 1234567890, Brother" value={formData.emergencyContact} onChange={e => setFormData({...formData, emergencyContact: e.target.value})} className="text-slate-900" />
             </div>
             <div className="space-y-2">
               <Label htmlFor="accountStatus" className="text-slate-700">Status</Label>

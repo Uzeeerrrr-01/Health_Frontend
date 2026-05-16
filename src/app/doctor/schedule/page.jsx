@@ -35,7 +35,7 @@ export default function DoctorSchedule() {
               </div>
 
               <div className={`flex gap-2 ${i >= 5 ? 'opacity-50 pointer-events-none' : ''}`}>
-                <select className="h-10 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600">
+                <select className="h-10 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600">
                   <option>Both</option>
                   <option>Online Only</option>
                   <option>Offline Only</option>
@@ -62,7 +62,7 @@ export default function DoctorSchedule() {
           <div className="grid sm:grid-cols-2 gap-6">
             <div className="space-y-2">
               <Label>Consultation Duration</Label>
-              <select className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600">
+              <select className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600">
                 <option>15 Minutes</option>
                 <option defaultValue="30 Minutes">30 Minutes</option>
                 <option>45 Minutes</option>
@@ -71,7 +71,7 @@ export default function DoctorSchedule() {
             </div>
             <div className="space-y-2">
               <Label>Buffer Time Between Slots</Label>
-              <select className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600">
+              <select className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600">
                 <option>None</option>
                 <option>5 Minutes</option>
                 <option defaultValue="10 Minutes">10 Minutes</option>

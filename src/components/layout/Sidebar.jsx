@@ -114,8 +114,14 @@ export function Sidebar({ role }) {
 
       {/* Sidebar */}
       <aside className={sidebarClass}>
-        <div className="flex h-16 items-center justify-between px-4 border-b border-slate-800">
-          <div className="flex items-center gap-2 overflow-hidden">
+        <div className={cn(
+          "flex h-16 items-center border-b border-slate-800 relative",
+          collapsed ? "justify-center px-0" : "justify-between px-4"
+        )}>
+          <div className={cn(
+            "flex items-center",
+            collapsed ? "justify-center mx-auto overflow-visible" : "gap-2 overflow-hidden"
+          )}>
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-teal-600">
               <Activity className="h-5 w-5 text-white" />
             </div>
@@ -127,7 +133,10 @@ export function Sidebar({ role }) {
           </div>
           <button
             onClick={toggleCollapse}
-            className="hidden sm:flex p-1 rounded-md text-slate-400 hover:bg-slate-800 hover:text-white transition-colors"
+            className={cn(
+              "hidden sm:flex p-1 rounded-md text-slate-400 hover:bg-slate-800 hover:text-white transition-colors",
+              collapsed ? "absolute right-1 top-1/2 -translate-y-1/2 scale-75" : ""
+            )}
           >
             {collapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
           </button>
