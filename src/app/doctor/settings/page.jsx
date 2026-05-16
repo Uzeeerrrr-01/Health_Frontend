@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/Card"
 import { Button } from "@/components/ui/Button"
 import { Input, Label } from "@/components/ui/Input"
@@ -12,7 +13,7 @@ export default function DoctorSettings() {
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const stored = localStorage.getItem('user')
+      const stored = sessionStorage.getItem('user')
       if (stored) {
         try {
           const parsed = JSON.parse(stored)
@@ -54,9 +55,11 @@ export default function DoctorSettings() {
           <Button variant="ghost" className="w-full justify-start text-slate-600 hover:text-slate-900">
             <Building2 className="mr-2 h-4 w-4" /> Clinic Details
           </Button>
-          <Button variant="ghost" className="w-full justify-start text-slate-600 hover:text-slate-900">
-            <Shield className="mr-2 h-4 w-4" /> Security
-          </Button>
+          <Link href="/doctor/settings/security" className="block w-full">
+            <Button variant="ghost" className="w-full justify-start text-slate-600 hover:text-slate-900">
+              <Shield className="mr-2 h-4 w-4" /> Security
+            </Button>
+          </Link>
         </div>
 
         <div className="flex-1 space-y-6">

@@ -4,7 +4,7 @@ import { useState } from "react"
 import { ChatWindow } from "@/components/shared/ChatWindow"
 import { Button } from "@/components/ui/Button"
 import { Card, CardContent } from "@/components/ui/Card"
-import { Activity, Plus, AlertCircle, Stethoscope, ChevronRight } from "lucide-react"
+import { Activity, Plus, AlertCircle, Stethoscope, ChevronRight, Pill, ShieldAlert } from "lucide-react"
 import Link from "next/link"
 import api from "@/lib/api"
 
@@ -146,6 +146,49 @@ export default function SymptomChecker() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Prescription Suggestions */}
+          {analysisData.suggestedPrescriptions?.length > 0 && (
+            <Card className="border-violet-200">
+              <CardContent className="p-5">
+                <h3 className="font-semibold text-slate-900 mb-1 flex items-center gap-2">
+                  <Pill className="h-4 w-4 text-violet-600" /> Suggested Medications
+                </h3>
+                <p className="text-xs text-slate-400 mb-4">AI-generated suggestions only. Must be confirmed by a licensed doctor.</p>
+
+                <div className="space-y-3">
+                  {analysisData.suggestedPrescriptions.map((rx, i) => (
+                    <div key={i} className="p-3 rounded-lg border border-slate-100 bg-slate-50 space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-slate-900 text-sm">{rx.name}</span>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide ${
+                          rx.type === "OTC"
+                            ? "bg-emerald-100 text-emerald-700"
+                            : "bg-violet-100 text-violet-700"
+                        }`}>
+                          {rx.type}
+                        </span>
+                      </div>
+                      <div className="flex gap-4 text-xs text-slate-500">
+                        <span>💊 {rx.dosage}</span>
+                        <span>⏱ {rx.duration}</span>
+                      </div>
+                      {rx.notes && (
+                        <p className="text-xs text-slate-500 italic">{rx.notes}</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-4 flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                  <ShieldAlert className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                  <p className="text-xs text-amber-700">
+                    <strong>Disclaimer:</strong> These are AI-generated suggestions only. Do not self-medicate. Always consult a licensed doctor before taking any medication.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           <Card className="bg-teal-600 text-white border-transparent">
             <CardContent className="p-5">

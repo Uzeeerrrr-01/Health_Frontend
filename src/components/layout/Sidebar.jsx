@@ -51,6 +51,7 @@ export function Sidebar({ role }) {
       { name: "Medicine Reminders", href: "/patient/reminders", icon: Clock },
       { name: "Health Records", href: "/patient/records", icon: FolderHeart },
       { name: "Profile & Settings", href: "/patient/profile", icon: Settings },
+      { name: "Support Tickets", href: "/patient/support-tickets", icon: LifeBuoy },
       { name: "Emergency SOS", href: "/patient/emergency", icon: AlertTriangle, variant: "destructive" },
     ],
     doctor: [
@@ -66,6 +67,7 @@ export function Sidebar({ role }) {
       { name: "Earnings", href: "/doctor/earnings", icon: DollarSign },
       { name: "Notifications", href: "/doctor/notifications", icon: Bell },
       { name: "Settings", href: "/doctor/settings", icon: Settings },
+      { name: "Support Tickets", href: "/doctor/support-tickets", icon: LifeBuoy },
     ],
     admin: [
       { name: "Dashboard", href: "/admin/dashboard", icon: LayoutDashboard },
@@ -76,7 +78,6 @@ export function Sidebar({ role }) {
       { name: "Reports", href: "/admin/reports", icon: FileText },
       { name: "Emergency Monitoring", href: "/admin/emergency-monitoring", icon: AlertTriangle, variant: "destructive" },
       { name: "Transactions", href: "/admin/transactions", icon: FileSpreadsheet },
-      { name: "CMS", href: "/admin/cms", icon: Megaphone },
       { name: "Support Tickets", href: "/admin/support-tickets", icon: LifeBuoy },
       { name: "System Settings", href: "/admin/settings", icon: Settings },
       { name: "Audit Logs", href: "/admin/audit-logs", icon: FileClock },

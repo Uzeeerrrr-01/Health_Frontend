@@ -1,35 +1,89 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card"
 import { Button } from "@/components/ui/Button"
 import { Badge } from "@/components/ui/Badge"
-import { AlertTriangle, MapPin, Phone, Activity, Clock, Shield } from "lucide-react"
+import { Input } from "@/components/ui/Input"
+import { AlertTriangle, MapPin, Phone, Activity, Clock, Shield, Search, Truck, Check } from "lucide-react"
 import api from "@/lib/api"
+import { toast } from "react-hot-toast"
 
 export default function EmergencyMonitoring() {
   const [emergencies, setEmergencies] = useState([])
   const [isLoading, setIsLoading] = useState(true)
+  const [searchQuery, setSearchQuery] = useState("")
+  const [statusFilter, setStatusFilter] = useState("All")
+  const [riskFilter, setRiskFilter] = useState("All")
+  const [checkedItems, setCheckedItems] = useState({})
+
+  const toggleCheck = (idx) => {
+    setCheckedItems(prev => ({ ...prev, [idx]: !prev[idx] }))
+  }
+
+  const fetchEmergencies = async () => {
+    try {
+      const res = await api.get('/admin/emergencies')
+      if (res.data.success) {
+        setEmergencies(res.data.data)
+      }
+    } catch (err) {
+      console.error("Failed to fetch emergencies:", err)
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   useEffect(() => {
-    const fetchEmergencies = async () => {
-      try {
-        const res = await api.get('/admin/emergencies')
-        if (res.data.success) {
-          setEmergencies(res.data.data)
-        }
-      } catch (err) {
-        console.error("Failed to fetch emergencies:", err)
-      } finally {
-        setIsLoading(false)
-      }
-    }
     fetchEmergencies()
-    
-    // Poll for new emergencies every 30 seconds
-    const interval = setInterval(fetchEmergencies, 30000)
+    const interval = setInterval(fetchEmergencies, 10000)
     return () => clearInterval(interval)
   }, [])
+
+  const handleUpdateStatus = async (id, status) => {
+    try {
+      const res = await api.patch(`/admin/emergencies/${id}/status`, { status })
+      if (res.data.success) {
+        toast.success(`Emergency status updated to ${status}`)
+        fetchEmergencies()
+      }
+    } catch (err) {
+      console.error("Failed to update status:", err)
+      toast.error("Failed to update status")
+    }
+  }
+
+  const filteredEmergencies = useMemo(() => {
+    return emergencies.filter(item => {
+      const patientName = item.patient?.fullName || ""
+      const symptoms = item.symptoms || ""
+      const matchesSearch = patientName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                           symptoms.toLowerCase().includes(searchQuery.toLowerCase())
+      const matchesStatus = statusFilter === "All" || item.status === statusFilter.toLowerCase()
+      const matchesRisk = riskFilter === "All" || item.riskLevel === riskFilter
+      return matchesSearch && matchesStatus && matchesRisk
+    })
+  }, [emergencies, searchQuery, statusFilter, riskFilter])
+
+  const getRiskBadge = (level) => {
+    switch (level) {
+      case 'Critical': return <Badge variant="destructive" className="animate-pulse">CRITICAL</Badge>
+      case 'High': return <Badge variant="destructive">HIGH</Badge>
+      case 'Medium': return <Badge variant="warning">MEDIUM</Badge>
+      case 'Low': return <Badge variant="success">LOW</Badge>
+      default: return <Badge variant="default">{level}</Badge>
+    }
+  }
+
+  const getStatusBadge = (status) => {
+    switch (status) {
+      case 'pending': return <Badge variant="warning">Pending</Badge>
+      case 'assigned':
+      case 'in progress': return <Badge className="bg-blue-100 text-blue-700 border border-blue-200">In Progress</Badge>
+      case 'resolved': return <Badge variant="success">Resolved</Badge>
+      default: return <Badge variant="default">{status}</Badge>
+    }
+  }
 
   if (isLoading) {
     return (
@@ -42,6 +96,8 @@ export default function EmergencyMonitoring() {
 
   return (
     <div className="space-y-6">
+
+      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">Emergency Monitoring</h1>
@@ -56,44 +112,190 @@ export default function EmergencyMonitoring() {
         </div>
       </div>
 
+      {/* Stats Row - Full Width */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card className="border-red-100 bg-red-50">
+          <CardContent className="p-4 flex items-center gap-4">
+            <div className="p-3 bg-red-100 rounded-xl">
+              <AlertTriangle className="h-5 w-5 text-red-600" />
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-red-700 uppercase tracking-wide">Pending</p>
+              <p className="text-3xl font-bold text-red-600">{emergencies.filter(e => e.status === 'pending').length}</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="border-blue-100 bg-blue-50">
+          <CardContent className="p-4 flex items-center gap-4">
+            <div className="p-3 bg-blue-100 rounded-xl">
+              <Activity className="h-5 w-5 text-blue-600" />
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Active</p>
+              <p className="text-3xl font-bold text-blue-600">{emergencies.filter(e => e.status === 'assigned').length}</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="border-emerald-100 bg-emerald-50">
+          <CardContent className="p-4 flex items-center gap-4">
+            <div className="p-3 bg-emerald-100 rounded-xl">
+              <Shield className="h-5 w-5 text-emerald-600" />
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wide">Resolved</p>
+              <p className="text-3xl font-bold text-emerald-600">{emergencies.filter(e => e.status === 'resolved').length}</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="border-slate-200">
+          <CardContent className="p-4 flex items-center gap-4">
+            <div className="p-3 bg-slate-100 rounded-xl">
+              <Clock className="h-5 w-5 text-slate-600" />
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Total Cases</p>
+              <p className="text-3xl font-bold text-slate-900">{emergencies.length}</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Search + Filters */}
+      <Card className="bg-slate-50/50">
+        <CardContent className="p-4 flex flex-col md:flex-row gap-4">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+            <Input
+              placeholder="Search by patient name or symptoms..."
+              className="pl-10 bg-white"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
+          <div className="flex gap-4">
+            <select
+              className="h-10 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-600"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+            >
+              <option value="All">All Statuses</option>
+              <option value="Pending">Pending</option>
+              <option value="Assigned">In Progress</option>
+              <option value="Resolved">Resolved</option>
+            </select>
+            <select
+              className="h-10 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-600"
+              value={riskFilter}
+              onChange={(e) => setRiskFilter(e.target.value)}
+            >
+              <option value="All">All Risk Levels</option>
+              <option value="Critical">Critical</option>
+              <option value="High">High</option>
+              <option value="Medium">Medium</option>
+              <option value="Low">Low</option>
+            </select>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Main Content Grid */}
       <div className="grid lg:grid-cols-3 gap-6">
+
+        {/* Emergency Cards - 2/3 width */}
         <div className="lg:col-span-2 space-y-4">
-          {emergencies.length > 0 ? (
-            emergencies.map((emergency) => (
-              <Card key={emergency._id} className="border-red-500 shadow-sm shadow-red-100 overflow-hidden relative">
-                <div className="absolute top-0 left-0 w-1.5 h-full bg-red-600"></div>
-                <CardContent className="p-6 flex flex-col md:flex-row gap-6">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-2">
-                      <Badge variant="destructive" className="animate-pulse flex items-center gap-1 uppercase">
-                        <Shield className="h-3 w-3" /> SOS Triggered
-                      </Badge>
-                      <span className="text-xs text-slate-500 flex items-center gap-1">
-                        <Clock className="h-3 w-3" /> {new Date(emergency.createdAt).toLocaleTimeString()}
-                      </span>
-                    </div>
-                    <h3 className="text-xl font-bold text-slate-900">{emergency.patient?.fullName || "Anonymous Patient"}</h3>
-                    <p className="flex items-center gap-1.5 text-sm text-slate-600 mt-2 font-medium">
-                      <MapPin className="h-4 w-4 text-red-500" /> {emergency.location || emergency.patient?.address || "Location not available"}
-                    </p>
-                    <div className="mt-4 p-4 bg-red-50 text-red-900 rounded-xl text-sm border border-red-100 shadow-inner">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Activity className="h-4 w-4 text-red-600 font-bold"/>
-                        <span className="font-bold uppercase tracking-wider text-[10px]">Medical Context</span>
+          {filteredEmergencies.length > 0 ? (
+            filteredEmergencies.map((emergency) => (
+              <Card key={emergency._id} className="border-red-200 shadow-sm overflow-hidden relative">
+                <div className={`absolute top-0 left-0 w-1.5 h-full ${emergency.riskLevel === 'Critical' ? 'bg-red-600' : 'bg-red-400'}`}></div>
+                <CardContent className="p-6">
+                  <div className="flex flex-col md:flex-row gap-6">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 mb-3">
+                        {getRiskBadge(emergency.riskLevel)}
+                        {getStatusBadge(emergency.status)}
+                        <span className="text-xs text-slate-500 flex items-center gap-1 ml-auto">
+                          <Clock className="h-3 w-3" /> {new Date(emergency.createdAt).toLocaleString()}
+                        </span>
                       </div>
-                      <p className="font-medium text-slate-800">{emergency.condition || "No specific condition reported. Dispatching immediate assistance."}</p>
-                      {emergency.patient?.phone && (
-                        <p className="mt-2 text-xs text-red-700 font-bold">Contact: {emergency.patient.phone}</p>
+                      <h3 className="text-xl font-bold text-slate-900">{emergency.patient?.fullName || "Anonymous Patient"}</h3>
+
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+                        <div className="space-y-1">
+                          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Symptoms</p>
+                          <p className="text-sm text-slate-700 font-medium">{emergency.symptoms}</p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Location</p>
+                          {emergency.latitude && emergency.longitude ? (
+                            <a
+                              href={`https://www.google.com/maps?q=${emergency.latitude},${emergency.longitude}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-800 font-medium hover:underline transition-colors w-fit"
+                            >
+                              <MapPin className="h-4 w-4 text-red-500" />
+                              {`${emergency.latitude.toFixed(4)}, ${emergency.longitude.toFixed(4)}`}
+                            </a>
+                          ) : (
+                            <p className="flex items-center gap-1.5 text-sm text-slate-500 font-medium">
+                              <MapPin className="h-4 w-4 text-slate-400" />
+                              Unavailable
+                            </p>
+                          )}
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Contact</p>
+                          <p className="text-sm text-slate-700 font-medium">{emergency.patient?.phone || "N/A"}</p>
+                        </div>
+                      </div>
+
+                      {emergency.nearestDoctors?.length > 0 && (
+                        <div className="mt-4 p-3 bg-slate-50 rounded-lg border border-slate-100">
+                          <p className="text-[10px] font-bold text-slate-500 uppercase mb-2">Nearest Doctors</p>
+                          <div className="flex flex-wrap gap-2">
+                            {emergency.nearestDoctors.map((doc, idx) => (
+                              <Badge key={idx} variant="outline" className="bg-white text-xs py-0.5">
+                                {doc.doctor?.fullName || "Doctor"} ({doc.distance?.toFixed(1)} km)
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
                       )}
                     </div>
-                  </div>
-                  <div className="flex flex-row md:flex-col gap-3 justify-center border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6 min-w-[200px]">
-                     <Button className="w-full gap-2 bg-red-600 hover:bg-red-700 text-white shadow-md">
-                       <Phone className="h-4 w-4"/> Dispatch EMS
-                     </Button>
-                     <Button variant="outline" className="w-full border-slate-200 text-slate-700 hover:bg-slate-50">
-                       Notify Emergency Contacts
-                     </Button>
+
+                    <div className="flex flex-col gap-3 justify-center border-t md:border-t-0 md:border-l border-slate-100 pt-5 md:pt-0 md:pl-6 min-w-[180px]">
+                      {emergency.status === 'pending' && (
+                        <Button
+                          onClick={() => handleUpdateStatus(emergency._id, 'assigned')}
+                          className="w-full gap-2 bg-blue-600 hover:bg-blue-700 text-white shadow-sm"
+                        >
+                          Mark In Progress
+                        </Button>
+                      )}
+                      {emergency.status !== 'resolved' && (
+                        <Button
+                          onClick={() => handleUpdateStatus(emergency._id, 'resolved')}
+                          className="w-full gap-2 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
+                        >
+                          Mark Resolved
+                        </Button>
+                      )}
+                      <a
+                        href={`tel:${emergency.patient?.phone || ''}`}
+                        className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors h-10 px-4 py-2 w-full border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 shadow-sm"
+                      >
+                        <Phone className="h-4 w-4 mr-2 text-slate-500" />
+                        Call Patient
+                      </a>
+                      <Button
+                        variant="outline"
+                        onClick={() => toast.success("🚑 Ambulance dispatched! ETA: 5 mins")}
+                        className="w-full gap-2 border-red-200 text-red-600 hover:bg-red-50 shadow-sm"
+                      >
+                        <Truck className="h-4 w-4" />
+                        Dispatch Ambulance
+                      </Button>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -103,38 +305,81 @@ export default function EmergencyMonitoring() {
               <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-emerald-50 mb-4">
                 <Shield className="h-8 w-8 text-emerald-500" />
               </div>
-              <h3 className="text-xl font-semibold text-slate-900 mb-2">All Quiet</h3>
-              <p className="text-slate-500">There are no active SOS alerts or emergency cases right now.</p>
+              <h3 className="text-xl font-semibold text-slate-900 mb-2">No emergency cases found</h3>
+              <p className="text-slate-500">Try adjusting your filters or search query.</p>
             </div>
           )}
         </div>
 
-        <div>
-          <Card className="h-full border-slate-200 shadow-sm">
-             <CardHeader className="border-b border-slate-50 bg-slate-50/30">
-               <CardTitle className="text-base flex items-center gap-2">
-                 <MapPin className="h-4 w-4 text-teal-600" />
-                 Ready Response Units
-               </CardTitle>
-             </CardHeader>
-             <CardContent className="p-4 space-y-3">
-                {[
-                  { name: "City General Hospital", dist: "1.2 miles", status: "Available" },
-                  { name: "St. Mary's Clinic", dist: "2.4 miles", status: "Busy" },
-                  { name: "Central EMS Hub", dist: "0.8 miles", status: "Available" }
-                ].map((unit, i) => (
-                  <div key={i} className="p-3 border border-slate-100 rounded-xl flex justify-between items-center bg-white hover:bg-slate-50 transition-colors">
-                    <div>
-                      <p className="font-semibold text-sm text-slate-900">{unit.name}</p>
-                      <p className="text-[10px] text-slate-500">{unit.dist} away</p>
+        {/* Right Sidebar - 1/3 width */}
+        <div className="space-y-6">
+
+          {/* Risk Distribution */}
+          <Card className="border-slate-200 shadow-sm">
+            <CardHeader className="border-b border-slate-50 bg-slate-50/30 pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Shield className="h-4 w-4 text-teal-600" />
+                Risk Distribution
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-4 space-y-3">
+              {['Critical', 'High', 'Medium', 'Low'].map(level => {
+                const count = emergencies.filter(e => e.riskLevel === level).length
+                const total = emergencies.length || 1
+                const percent = (count / total) * 100
+                return (
+                  <div key={level} className="space-y-1">
+                    <div className="flex justify-between text-xs">
+                      <span className="font-medium text-slate-700">{level}</span>
+                      <span className="text-slate-500 font-semibold">{count}</span>
                     </div>
-                    <Badge variant={unit.status === 'Available' ? 'success' : 'warning'} className="text-[10px]">
-                      {unit.status}
-                    </Badge>
+                    <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all ${level === 'Critical' ? 'bg-red-600' : level === 'High' ? 'bg-red-400' : level === 'Medium' ? 'bg-amber-400' : 'bg-emerald-400'}`}
+                        style={{ width: `${percent}%` }}
+                      ></div>
+                    </div>
                   </div>
-                ))}
-             </CardContent>
+                )
+              })}
+            </CardContent>
           </Card>
+
+          {/* Response Checklist */}
+          <Card className="border-slate-200 shadow-sm">
+            <CardHeader className="border-b border-slate-50 bg-slate-50/30 pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Activity className="h-4 w-4 text-teal-600" />
+                Response Checklist
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-4 space-y-1">
+              {[
+                "Confirm patient location",
+                "Assess risk and symptoms",
+                "Assign nearest doctor/EMS",
+                "Notify emergency contacts",
+                "Follow up until resolved"
+              ].map((item, i) => (
+                <div
+                  key={i}
+                  className="flex items-center gap-3 p-2.5 text-sm text-slate-600 cursor-pointer hover:bg-slate-50 rounded-md transition-colors"
+                  onClick={() => toggleCheck(i)}
+                >
+                  <div className={`h-4 w-4 rounded border flex items-center justify-center flex-shrink-0 transition-colors ${checkedItems[i] ? 'bg-teal-600 border-teal-600' : 'border-slate-300'}`}>
+                    {checkedItems[i] && <Check className="h-3 w-3 text-white" />}
+                  </div>
+                  <span className={checkedItems[i] ? 'line-through text-slate-400' : ''}>{item}</span>
+                </div>
+              ))}
+              {Object.values(checkedItems).filter(Boolean).length === 5 && (
+                <div className="mt-3 p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-center">
+                  <p className="text-sm font-semibold text-emerald-700">✓ All steps completed!</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
         </div>
       </div>
     </div>

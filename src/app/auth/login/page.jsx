@@ -1,13 +1,14 @@
 "use client"
 
-import { useState, Suspense } from "react"
+import { useState, useEffect, Suspense } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/Button"
 import { Input, Label } from "@/components/ui/Input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/Card"
-import { Activity } from "lucide-react"
+import { Activity, Eye, EyeOff } from "lucide-react"
 import api from "@/lib/api"
+import { useAuth } from "@/context/AuthContext"
 
 function LoginContent() {
   const router = useRouter()
@@ -17,9 +18,12 @@ function LoginContent() {
   const [role, setRole] = useState(initialRole)
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [showPassword, setShowPassword] = useState(false)
   const [adminAccessCode, setAdminAccessCode] = useState("")
+  const [showAdminCode, setShowAdminCode] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
+  const { login } = useAuth()
 
   const handleDemoLogin = async (selectedRole) => {
     setLoading(true)
@@ -32,22 +36,13 @@ function LoginContent() {
       }
 
       const credentials = demoCredentials[selectedRole]
-      console.log('Demo Login - Selected Role:', selectedRole)
-      
       const response = await api.post('/auth/login', credentials)
       
       if (response.data.success) {
-        const { token, role: userRole } = response.data
-        
-        localStorage.setItem('token', token)
-        localStorage.setItem('role', userRole)
-        localStorage.setItem('user', JSON.stringify(response.data))
-        
-        router.push(`/${userRole}/dashboard`)
+        login(response.data, response.data.token, response.data.role)
       }
     } catch (err) {
-      console.error("Demo login failed:", err)
-      setError("Demo accounts are currently unavailable. Please register a new account.")
+      setError("Demo accounts are currently unavailable.")
     } finally {
       setLoading(false)
     }
@@ -60,31 +55,21 @@ function LoginContent() {
 
     try {
       const payload = { email, password, role }
-      console.log('Login Payload being sent:', payload)
+      console.log("[LoginPage] Submitting login with role:", role);
       
       if (role === "admin") {
         payload.adminAccessCode = adminAccessCode
       }
 
       const response = await api.post('/auth/login', payload)
-      console.log('Login Response received:', response.data)
+      console.log("[LoginPage] Response received:", response.data);
       
       if (response.data.success) {
-        const { token, role: userRole, verificationStatus } = response.data
-        
-        localStorage.setItem('token', token)
-        localStorage.setItem('role', userRole)
-        localStorage.setItem('user', JSON.stringify(response.data))
-
-        // Redirect based on role returned from backend
-        if (userRole === "doctor" && verificationStatus !== "approved") {
-           router.push('/auth/register?role=doctor&status=' + verificationStatus)
-        } else {
-           router.push(`/${userRole}/dashboard`)
-        }
+        login(response.data, response.data.token, response.data.role)
       }
     } catch (err) {
-      setError(err.response?.data?.message || err.message || "Failed to login. Please check your credentials.")
+      console.error("[LoginPage] Login error:", err);
+      setError(err.response?.data?.message || "Failed to login.")
     } finally {
       setLoading(false)
     }
@@ -151,27 +136,47 @@ function LoginContent() {
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <Label htmlFor="password">Password</Label>
-                  <Link href="#" className="text-xs text-teal-600 hover:underline">Forgot password?</Link>
+                  <Link href="/auth/forgot-password" size="sm" className="text-xs text-teal-600 hover:underline">Forgot password?</Link>
                 </div>
-                <Input 
-                  id="password" 
-                  type="password" 
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required 
-                />
+                <div className="relative">
+                  <Input 
+                    id="password" 
+                    type={showPassword ? "text" : "password"} 
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required 
+                    className="pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-teal-600 transition-colors"
+                  >
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
               </div>
 
               {role === "admin" && (
                 <div className="space-y-2">
                   <Label htmlFor="accessCode">Admin Access Code</Label>
-                  <Input 
-                    id="accessCode" 
-                    type="password" 
-                    value={adminAccessCode}
-                    onChange={(e) => setAdminAccessCode(e.target.value)}
-                    required 
-                  />
+                  <div className="relative">
+                    <Input 
+                      id="accessCode" 
+                      type={showAdminCode ? "text" : "password"} 
+                      value={adminAccessCode}
+                      onChange={(e) => setAdminAccessCode(e.target.value)}
+                      required 
+                      className="pr-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowAdminCode(!showAdminCode)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-teal-600 transition-colors"
+                    >
+                      {showAdminCode ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                  </div>
                 </div>
               )}
 

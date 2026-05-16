@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Modal } from "@/components/ui/Modal"
 import { Search, Plus, Edit2, Trash2, Eye, Filter } from "lucide-react"
 import api from "@/lib/api"
+import { toast } from "react-hot-toast"
 
 export default function AdminDoctors() {
   const [doctors, setDoctors] = useState([])
@@ -37,6 +38,7 @@ export default function AdminDoctors() {
       }
     } catch (err) {
       console.error("Failed to fetch doctors:", err)
+      toast.error(typeof err === 'string' ? err : "Failed to load doctor data")
     } finally {
       setIsLoading(false)
     }
@@ -44,6 +46,8 @@ export default function AdminDoctors() {
 
   useEffect(() => {
     fetchDoctors()
+    const interval = setInterval(fetchDoctors, 10000) // Poll every 10s
+    return () => clearInterval(interval)
   }, [])
 
   const filteredDoctors = useMemo(() => {
@@ -65,12 +69,6 @@ export default function AdminDoctors() {
 
   const specializations = ["All", ...new Set(doctors.map(d => d.specialization).filter(Boolean))];
 
-  const handleOpenAdd = () => {
-    // Note: The backend route /admin/doctors POST does not exist. Adding doctors is done via /auth/doctor/register.
-    // For completeness in this admin view, we could add it but typically admins edit/delete.
-    // We'll leave the UI for Add, but it would actually call an API if we implemented it, or redirect to register.
-    alert("To add a doctor, please use the registration flow. Admins can edit and verify existing doctors.");
-  }
 
   const handleOpenEdit = (doctor) => {
     setFormData({
@@ -104,11 +102,12 @@ export default function AdminDoctors() {
     if (selectedDoctor) {
       try {
         await api.put(`/admin/doctors/${selectedDoctor._id}`, formData)
+        toast.success("Doctor details updated")
         fetchDoctors()
         setIsFormModalOpen(false)
       } catch (err) {
         console.error("Failed to update doctor:", err)
-        alert("Failed to update doctor")
+        toast.error("Failed to update doctor")
       }
     }
   }
@@ -117,11 +116,12 @@ export default function AdminDoctors() {
     if (selectedDoctor) {
       try {
         await api.delete(`/admin/doctors/${selectedDoctor._id}`)
+        toast.success("Doctor deleted")
         fetchDoctors()
         setIsDeleteModalOpen(false)
       } catch (err) {
         console.error("Failed to delete doctor:", err)
-        alert("Failed to delete doctor")
+        toast.error("Failed to delete doctor")
       }
     }
   }
@@ -139,7 +139,6 @@ export default function AdminDoctors() {
     if (s === "approved") return "Verified";
     return status ? status.charAt(0).toUpperCase() + status.slice(1) : "";
   }
-
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -147,9 +146,6 @@ export default function AdminDoctors() {
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">Doctors</h1>
           <p className="text-slate-500">Manage all doctor accounts and verifications.</p>
         </div>
-        <Button onClick={handleOpenAdd} className="flex items-center gap-2">
-          <Plus className="w-4 h-4" /> Add Doctor
-        </Button>
       </div>
 
       <Card>
@@ -168,7 +164,7 @@ export default function AdminDoctors() {
               <div className="flex items-center gap-2 w-full sm:w-auto">
                 <Filter className="w-4 h-4 text-slate-500" />
                 <select 
-                  className="flex h-10 w-full sm:w-40 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600"
+                  className="flex h-10 w-full sm:w-40 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 ring-offset-white text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600"
                   value={specFilter}
                   onChange={(e) => setSpecFilter(e.target.value)}
                 >
@@ -179,7 +175,7 @@ export default function AdminDoctors() {
               </div>
               <div className="flex items-center gap-2 w-full sm:w-auto">
                 <select 
-                  className="flex h-10 w-full sm:w-40 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600"
+                  className="flex h-10 w-full sm:w-40 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 ring-offset-white text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600"
                   value={verifFilter}
                   onChange={(e) => setVerifFilter(e.target.value)}
                 >
@@ -258,7 +254,7 @@ export default function AdminDoctors() {
       <Modal 
         isOpen={isFormModalOpen} 
         onClose={() => setIsFormModalOpen(false)} 
-        title={selectedDoctor ? "Edit Doctor" : "Add New Doctor"}
+        title="Edit Doctor"
       >
         <form onSubmit={handleSaveDoctor} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -298,7 +294,7 @@ export default function AdminDoctors() {
               <Label htmlFor="verificationStatus" className="text-slate-700">Verification Status</Label>
               <select 
                 id="verificationStatus"
-                className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600"
+                className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600"
                 value={formData.verificationStatus}
                 onChange={e => setFormData({...formData, verificationStatus: e.target.value})}
               >
@@ -311,7 +307,7 @@ export default function AdminDoctors() {
               <Label htmlFor="accountStatus" className="text-slate-700">Account Status</Label>
               <select 
                 id="accountStatus"
-                className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600"
+                className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600"
                 value={formData.accountStatus}
                 onChange={e => setFormData({...formData, accountStatus: e.target.value})}
               >

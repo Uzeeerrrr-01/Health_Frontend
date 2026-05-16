@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/Badge"
 import { Button } from "@/components/ui/Button"
 import { FileText, CheckCircle2, XCircle, MapPin } from "lucide-react"
 import api from "@/lib/api"
+import { toast } from "react-hot-toast"
 
 export default function DoctorVerification() {
   const [pendingDoctors, setPendingDoctors] = useState([])
@@ -27,6 +28,8 @@ export default function DoctorVerification() {
 
   useEffect(() => {
     fetchPendingDoctors()
+    const interval = setInterval(fetchPendingDoctors, 10000) // Poll every 10s
+    return () => clearInterval(interval)
   }, [])
 
   const handleVerify = async (doctorId, status) => {
@@ -60,16 +63,12 @@ export default function DoctorVerification() {
       const response = await api.put(`/admin/doctors/${doctorId}/verify`, payload);
       console.log('Verification response:', response.data);
       
-      alert(`Doctor ${status === 'approved' ? 'approved' : 'rejected'} successfully! Email notification sent.`);
+      toast.success(`Doctor ${status === 'approved' ? 'approved' : 'rejected'} successfully! notification sent.`);
       fetchPendingDoctors();
     } catch (err) {
       console.error(`Failed to ${status} doctor:`, err);
-      console.error('Error response:', err.response);
-      console.error('Error data:', err.response?.data);
-      console.error('Error message:', err.message);
-      
       const errorMessage = err.response?.data?.message || err.message || 'Unknown error occurred';
-      alert(`Failed to ${status} doctor: ${errorMessage}`);
+      toast.error(`Failed to ${status} doctor: ${errorMessage}`);
     }
   }
 
@@ -113,7 +112,7 @@ export default function DoctorVerification() {
 
                   <div className="flex-1 flex gap-4">
                     {doc.degreeCertificate ? (
-                      <a href={doc.degreeCertificate} target="_blank" rel="noreferrer" className="flex-1 p-4 border border-slate-200 rounded-lg flex flex-col items-center justify-center text-center cursor-pointer hover:bg-slate-50">
+                      <a href={`http://localhost:5000/uploads/${doc.degreeCertificate}`} target="_blank" rel="noreferrer" className="flex-1 p-4 border border-slate-200 rounded-lg flex flex-col items-center justify-center text-center cursor-pointer hover:bg-slate-50">
                         <FileText className="h-8 w-8 text-indigo-500 mb-2" />
                         <span className="text-sm font-medium">View Degree</span>
                       </a>
@@ -123,9 +122,9 @@ export default function DoctorVerification() {
                         <span className="text-sm font-medium">No Degree</span>
                       </div>
                     )}
-
+ 
                     {doc.governmentId ? (
-                      <a href={doc.governmentId} target="_blank" rel="noreferrer" className="flex-1 p-4 border border-slate-200 rounded-lg flex flex-col items-center justify-center text-center cursor-pointer hover:bg-slate-50">
+                      <a href={`http://localhost:5000/uploads/${doc.governmentId}`} target="_blank" rel="noreferrer" className="flex-1 p-4 border border-slate-200 rounded-lg flex flex-col items-center justify-center text-center cursor-pointer hover:bg-slate-50">
                         <FileText className="h-8 w-8 text-indigo-500 mb-2" />
                         <span className="text-sm font-medium">View ID</span>
                       </a>
@@ -135,9 +134,9 @@ export default function DoctorVerification() {
                         <span className="text-sm font-medium">No ID</span>
                       </div>
                     )}
-
+ 
                     {doc.medicalLicenseProof ? (
-                      <a href={doc.medicalLicenseProof} target="_blank" rel="noreferrer" className="flex-1 p-4 border border-slate-200 rounded-lg flex flex-col items-center justify-center text-center cursor-pointer hover:bg-slate-50">
+                      <a href={`http://localhost:5000/uploads/${doc.medicalLicenseProof}`} target="_blank" rel="noreferrer" className="flex-1 p-4 border border-slate-200 rounded-lg flex flex-col items-center justify-center text-center cursor-pointer hover:bg-slate-50">
                         <FileText className="h-8 w-8 text-indigo-500 mb-2" />
                         <span className="text-sm font-medium">View License</span>
                       </a>

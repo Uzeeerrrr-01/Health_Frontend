@@ -1,130 +1,218 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { Card, CardContent } from "@/components/ui/Card"
-import { Badge } from "@/components/ui/Badge"
+import { useState, useEffect, useMemo } from "react"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card"
 import { Button } from "@/components/ui/Button"
+import { Badge } from "@/components/ui/Badge"
+import { Input } from "@/components/ui/Input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/Table"
-import { Search, DollarSign, CreditCard, Download, Filter } from "lucide-react"
+import { Search, Filter, FileSpreadsheet, DollarSign, Clock, CheckCircle2, XCircle, ArrowUpRight, ArrowDownRight } from "lucide-react"
 import api from "@/lib/api"
+import { toast } from "react-hot-toast"
 
 export default function AdminTransactions() {
   const [transactions, setTransactions] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
+  const [statusFilter, setStatusFilter] = useState("All")
+
+  const fetchTransactions = async () => {
+    try {
+      const res = await api.get('/admin/transactions')
+      if (res.data.success) {
+        setTransactions(res.data.data)
+      }
+    } catch (err) {
+      console.error("Failed to fetch transactions:", err)
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   useEffect(() => {
-    const fetchTransactions = async () => {
-      try {
-        const res = await api.get('/admin/transactions')
-        if (res.data.success) {
-          setTransactions(res.data.data)
-        }
-      } catch (err) {
-        console.error("Failed to fetch admin transactions:", err)
-      } finally {
-        setIsLoading(false)
-      }
-    }
     fetchTransactions()
   }, [])
 
-  const filteredTransactions = transactions.filter(tx => 
-    tx.user?.fullName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    tx.transactionId?.toLowerCase().includes(searchQuery.toLowerCase())
-  )
+  const filteredTransactions = useMemo(() => {
+    return transactions.filter(t => {
+      const patientName = t.patient?.fullName || ""
+      const doctorName = t.doctor?.fullName || ""
+      const matchesSearch = patientName.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                           doctorName.toLowerCase().includes(searchQuery.toLowerCase())
+      
+      const matchesStatus = statusFilter === "All" || t.status === statusFilter.toLowerCase()
+      return matchesSearch && matchesStatus
+    })
+  }, [transactions, searchQuery, statusFilter])
+
+  const stats = {
+    total: transactions.reduce((acc, t) => t.status === 'completed' ? acc + t.amount : acc, 0),
+    pending: transactions.filter(t => t.status === 'pending').length,
+    completed: transactions.filter(t => t.status === 'completed').length,
+    failed: transactions.filter(t => t.status === 'failed').length
+  }
+
+  const getStatusBadge = (status) => {
+    switch (status) {
+      case 'completed': return <Badge variant="success">Completed</Badge>
+      case 'pending': return <Badge variant="warning">Pending</Badge>
+      case 'failed': return <Badge variant="destructive">Failed</Badge>
+      case 'refunded': return <Badge variant="default">Refunded</Badge>
+      default: return <Badge variant="default">{status}</Badge>
+    }
+  }
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">Financial Transactions</h1>
-          <p className="text-slate-500">Monitor all platform payments, subscriptions, and doctor payouts.</p>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900">Transactions</h1>
+          <p className="text-slate-500">View and manage all payment records across the platform.</p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" className="gap-2 border-slate-200">
-            <Download className="h-4 w-4" /> Export Report
-          </Button>
-        </div>
+        <Button variant="outline" className="flex items-center gap-2">
+          <FileSpreadsheet className="w-4 h-4" /> Export CSV
+        </Button>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card className="bg-slate-50 border-slate-200">
-          <CardContent className="p-6">
-            <p className="text-sm font-medium text-slate-500 mb-1">Total Volume</p>
-            <h3 className="text-2xl font-bold text-slate-900">$0.00</h3>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card className="bg-white border-slate-200">
+          <CardContent className="p-6 flex items-center gap-4">
+            <div className="p-3 bg-emerald-100 text-emerald-600 rounded-xl">
+              <DollarSign className="w-6 h-6" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-slate-500">Total Revenue</p>
+              <h3 className="text-2xl font-bold text-slate-900">${stats.total.toLocaleString()}</h3>
+            </div>
           </CardContent>
         </Card>
-        <Card className="bg-slate-50 border-slate-200">
-          <CardContent className="p-6">
-            <p className="text-sm font-medium text-slate-500 mb-1">Pending Payouts</p>
-            <h3 className="text-2xl font-bold text-slate-900">$0.00</h3>
+        <Card className="bg-white border-slate-200">
+          <CardContent className="p-6 flex items-center gap-4">
+            <div className="p-3 bg-amber-100 text-amber-600 rounded-xl">
+              <Clock className="w-6 h-6" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-slate-500">Pending Payments</p>
+              <h3 className="text-2xl font-bold text-slate-900">{stats.pending}</h3>
+            </div>
           </CardContent>
         </Card>
-        <Card className="bg-slate-50 border-slate-200">
-          <CardContent className="p-6">
-            <p className="text-sm font-medium text-slate-500 mb-1">Net Revenue</p>
-            <h3 className="text-2xl font-bold text-slate-900">$0.00</h3>
+        <Card className="bg-white border-slate-200">
+          <CardContent className="p-6 flex items-center gap-4">
+            <div className="p-3 bg-blue-100 text-blue-600 rounded-xl">
+              <CheckCircle2 className="w-6 h-6" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-slate-500">Completed</p>
+              <h3 className="text-2xl font-bold text-slate-900">{stats.completed}</h3>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="bg-white border-slate-200">
+          <CardContent className="p-6 flex items-center gap-4">
+            <div className="p-3 bg-red-100 text-red-600 rounded-xl">
+              <XCircle className="w-6 h-6" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-slate-500">Failed</p>
+              <h3 className="text-2xl font-bold text-slate-900">{stats.failed}</h3>
+            </div>
           </CardContent>
         </Card>
       </div>
 
       <Card>
         <CardContent className="p-0">
-          <div className="p-4 border-b border-slate-200 flex flex-col sm:flex-row gap-4 items-center justify-between bg-white">
+          <div className="p-4 border-b border-slate-200 flex flex-col sm:flex-row gap-4 items-center justify-between bg-slate-50/50">
             <div className="relative w-full sm:w-96">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Search by patient or transaction ID..."
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
+              <Input
+                placeholder="Search by patient or doctor..."
+                className="pl-9 bg-white text-slate-900"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="h-10 w-full rounded-md border border-slate-200 bg-white pl-9 pr-4 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-600"
               />
             </div>
-            <Button variant="outline" size="sm" className="gap-2 border-slate-200">
-              <Filter className="h-4 w-4" /> Filters
-            </Button>
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <Filter className="w-4 h-4 text-slate-500" />
+              <select 
+                className="flex h-10 w-full sm:w-40 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-600"
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+              >
+                <option value="All">All Statuses</option>
+                <option value="Completed">Completed</option>
+                <option value="Pending">Pending</option>
+                <option value="Failed">Failed</option>
+                <option value="Refunded">Refunded</option>
+              </select>
+            </div>
           </div>
 
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Transaction ID</TableHead>
-                <TableHead>User</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Date</TableHead>
-                <TableHead>Amount</TableHead>
-                <TableHead>Status</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {isLoading ? (
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8 text-slate-500">Loading transactions...</TableCell>
+                  <TableHead>Transaction ID</TableHead>
+                  <TableHead>Patient</TableHead>
+                  <TableHead>Doctor</TableHead>
+                  <TableHead>Amount</TableHead>
+                  <TableHead>Method</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Date</TableHead>
                 </TableRow>
-              ) : filteredTransactions.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8 text-slate-500">No transactions recorded yet.</TableCell>
-                </TableRow>
-              ) : (
-                filteredTransactions.map((tx) => (
-                  <TableRow key={tx._id}>
-                    <TableCell className="font-mono text-xs text-slate-500">{tx.transactionId || tx._id.slice(-8).toUpperCase()}</TableCell>
-                    <TableCell className="font-medium text-slate-900">{tx.user?.fullName || "N/A"}</TableCell>
-                    <TableCell className="text-slate-700 capitalize">{tx.type || "Consultation"}</TableCell>
-                    <TableCell className="text-slate-500 text-sm">{new Date(tx.createdAt).toLocaleDateString()}</TableCell>
-                    <TableCell className="font-bold text-slate-900">${tx.amount?.toFixed(2)}</TableCell>
-                    <TableCell>
-                      <Badge variant={tx.status === 'completed' || tx.status === 'Success' ? 'success' : 'warning'}>
-                        {tx.status}
-                      </Badge>
+              </TableHeader>
+              <TableBody>
+                {isLoading ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center py-8 text-slate-500">
+                      Loading transactions...
                     </TableCell>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                ) : filteredTransactions.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center py-20">
+                      <div className="flex flex-col items-center">
+                        <DollarSign className="h-12 w-12 text-slate-200 mb-3" />
+                        <p className="text-lg font-semibold text-slate-900">No transactions found</p>
+                        <p className="text-slate-500">Try adjusting your search or filters.</p>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filteredTransactions.map((t) => (
+                    <TableRow key={t._id}>
+                      <TableCell className="font-mono text-xs text-slate-500">{t._id.substring(0, 10)}...</TableCell>
+                      <TableCell>
+                        <p className="font-medium text-slate-900">{t.patient?.fullName || "Deleted User"}</p>
+                        <p className="text-xs text-slate-500">{t.patient?.email}</p>
+                      </TableCell>
+                      <TableCell>
+                        <p className="font-medium text-slate-900">{t.doctor?.fullName || "MediAI"}</p>
+                        <p className="text-xs text-slate-500">{t.doctor?.specialization || "System"}</p>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1 font-bold text-slate-900">
+                          {t.status === 'completed' ? <ArrowDownRight className="w-3 h-3 text-emerald-500" /> : <ArrowUpRight className="w-3 h-3 text-slate-400" />}
+                          ${t.amount.toFixed(2)}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="capitalize text-[10px] bg-slate-50">
+                          {t.paymentMethod?.replace('_', ' ') || 'card'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>{getStatusBadge(t.status)}</TableCell>
+                      <TableCell className="text-right text-sm text-slate-500">
+                        {new Date(t.createdAt).toLocaleDateString()}<br/>
+                        <span className="text-[10px]">{new Date(t.createdAt).toLocaleTimeString()}</span>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
         </CardContent>
       </Card>
     </div>

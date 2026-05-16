@@ -6,6 +6,8 @@ import { StatCard } from "@/components/shared/StatCard"
 import { Users, Stethoscope, Calendar, AlertTriangle, DollarSign, Activity } from "lucide-react"
 import api from "@/lib/api"
 
+import { toast } from "react-hot-toast"
+
 export default function AdminDashboard() {
   const [stats, setStats] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -19,11 +21,14 @@ export default function AdminDashboard() {
         }
       } catch (err) {
         console.error("Failed to fetch admin stats:", err)
+        toast.error(typeof err === 'string' ? err : "Failed to fetch platform statistics")
       } finally {
         setIsLoading(false)
       }
     }
     fetchStats()
+    const interval = setInterval(fetchStats, 15000) // Poll every 15s
+    return () => clearInterval(interval)
   }, [])
 
   if (isLoading) {

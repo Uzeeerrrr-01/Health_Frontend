@@ -12,7 +12,7 @@ export default function HealthRecords() {
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const storedUser = localStorage.getItem('user')
+      const storedUser = sessionStorage.getItem('user')
       if (storedUser) {
         const parsed = JSON.parse(storedUser)
         setUser(parsed.user || parsed)
@@ -67,7 +67,7 @@ export default function HealthRecords() {
                   <div className="p-2 bg-white rounded-lg shadow-sm text-slate-500"><Activity className="h-4 w-4" /></div>
                   <span className="text-sm font-medium text-slate-700">Age / Sex</span>
                 </div>
-                <span className="font-semibold text-slate-900">{user.age || 'N/A'} yrs • {user.sex || 'N/A'}</span>
+                <span className="font-semibold text-slate-900">{user.age || 'N/A'} yrs • <span className="capitalize">{user.sex || 'N/A'}</span></span>
               </div>
               <div className="flex justify-between items-center p-3 bg-slate-50 rounded-xl border border-slate-100">
                 <div className="flex items-center gap-3">

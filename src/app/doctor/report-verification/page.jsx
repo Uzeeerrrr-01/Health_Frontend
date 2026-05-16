@@ -27,7 +27,7 @@ export default function ReportVerification() {
         if (res.data.success) {
           const pending = res.data.data.filter(r => r.status === 'pending' || r.status === 'Under Doctor Review' || r.status === 'Draft by AI')
           setReports(pending)
-          if (pending.length > 0) {
+          if (!selectedReport && pending.length > 0) {
             handleSelectReport(pending[0])
           }
         }
@@ -38,7 +38,9 @@ export default function ReportVerification() {
       }
     }
     fetchPendingReports()
-  }, [])
+    const interval = setInterval(fetchPendingReports, 10000)
+    return () => clearInterval(interval)
+  }, [selectedReport])
 
   const handleSelectReport = (report) => {
     setSelectedReport(report)

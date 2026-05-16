@@ -1,7 +1,7 @@
 import * as React from "react"
 import { cn } from "@/lib/utils"
 
-const Button = React.forwardRef(({ className, variant = "default", size = "default", ...props }, ref) => {
+const Button = React.forwardRef(({ className, variant = "default", size = "default", asChild, ...props }, ref) => {
   const variants = {
     default: "bg-teal-600 text-white hover:bg-teal-700 shadow-sm",
     outline: "border border-slate-200 bg-white hover:bg-slate-100 text-slate-900",

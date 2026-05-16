@@ -30,7 +30,7 @@ export default function AIDiagnosisAssistant() {
               <div className="p-4 bg-slate-50 rounded-lg border border-slate-200 text-sm space-y-2">
                 <div className="flex justify-between">
                   <span className="text-slate-500">Age / Sex</span>
-                  <span className="font-medium text-slate-900">34 / Male</span>
+                  <span className="font-medium text-slate-900">34 / <span className="capitalize">male</span></span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-500">Vitals</span>

@@ -12,7 +12,7 @@ api.interceptors.request.use(
   (config) => {
     // We need to check if window is defined because Next.js does SSR
     if (typeof window !== 'undefined') {
-      const token = localStorage.getItem('token');
+      const token = sessionStorage.getItem('token');
       if (token) {
         config.headers.Authorization = `Bearer ${token}`;
       }
@@ -30,30 +30,25 @@ api.interceptors.response.use(
     return response;
   },
   (error) => {
+    let message = 'An unexpected error occurred';
+    
     if (error.response) {
-      // The request was made and the server responded with a status code
-      // that falls out of the range of 2xx
+      // Server responded with error
       if (error.response.status === 401) {
-        // Unauthorized, maybe clear token and redirect to login
         if (typeof window !== 'undefined') {
-          localStorage.removeItem('token');
-          localStorage.removeItem('user');
-          localStorage.removeItem('role');
-          // Avoid redirecting if already on login or register to prevent loop
-          const currentPath = window.location.pathname;
-          if (!currentPath.includes('/auth/login') && !currentPath.includes('/auth/register')) {
-            window.location.href = '/auth/login';
-          }
+          sessionStorage.clear();
         }
       }
-      return Promise.reject(error.response?.data || new Error(error.response?.statusText || 'Network Error'));
+      message = error.response.data?.message || error.response.data?.error || error.response.statusText || message;
     } else if (error.request) {
-      // The request was made but no response was received
-      return Promise.reject(new Error('No response from server. Please check your connection.'));
+      // Request made but no response
+      message = 'No response from server. Please check your connection.';
     } else {
-      // Something happened in setting up the request that triggered an Error
-      return Promise.reject(error);
+      message = error.message;
     }
+    
+    console.error('API Error:', message, error);
+    return Promise.reject(message);
   }
 );
 

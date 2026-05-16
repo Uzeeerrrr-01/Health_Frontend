@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/Button"
 import { Users, Calendar, FileText, AlertTriangle, ChevronRight, Activity, DollarSign } from "lucide-react"
 import Link from "next/link"
 import api from "@/lib/api"
+import { toast } from "react-hot-toast"
 
 export default function DoctorDashboard() {
   const [doctor, setDoctor] = useState(null)
@@ -19,7 +20,7 @@ export default function DoctorDashboard() {
     const fetchDoctorData = async () => {
       try {
         if (typeof window !== 'undefined') {
-          const storedUser = localStorage.getItem('user')
+          const storedUser = sessionStorage.getItem('user')
           if (storedUser) {
             const parsedUser = JSON.parse(storedUser)
             setDoctor(parsedUser.user || parsedUser)
@@ -39,11 +40,14 @@ export default function DoctorDashboard() {
         }
       } catch (error) {
         console.error("Failed to fetch doctor dashboard data", error)
+        toast.error(typeof error === 'string' ? error : "Failed to load dashboard data")
       } finally {
         setIsLoading(false)
       }
     }
     fetchDoctorData()
+    const interval = setInterval(fetchDoctorData, 15000) // Poll every 15s
+    return () => clearInterval(interval)
   }, [])
 
   const upcomingAppointments = appointments.filter(a => 

@@ -27,6 +27,8 @@ export default function DoctorEarnings() {
       }
     }
     fetchEarnings()
+    const interval = setInterval(fetchEarnings, 60000) // Poll every 60s
+    return () => clearInterval(interval)
   }, [])
 
   if (isLoading) {

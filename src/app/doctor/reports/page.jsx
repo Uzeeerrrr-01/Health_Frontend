@@ -4,29 +4,72 @@ import { useState, useEffect } from "react"
 import { Card, CardContent } from "@/components/ui/Card"
 import { Badge } from "@/components/ui/Badge"
 import { Button } from "@/components/ui/Button"
-import { FileText, Eye, Download, Search } from "lucide-react"
+import { Modal } from "@/components/ui/Modal"
+import { FileText, Eye, Download, Search, CheckCircle2 } from "lucide-react"
 import api from "@/lib/api"
+import { toast } from "react-hot-toast"
 
 export default function DoctorReports() {
   const [reports, setReports] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
+  
+  // Report Edit Modal State
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false)
+  const [selectedReport, setSelectedReport] = useState(null)
+  const [editForm, setEditForm] = useState({ summary: "", prescription: "" })
+
+  const fetchReports = async () => {
+    try {
+      const res = await api.get('/reports/doctor')
+      if (res.data.success) {
+        setReports(res.data.data)
+      }
+    } catch (err) {
+      console.error("Failed to fetch doctor reports:", err)
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   useEffect(() => {
-    const fetchReports = async () => {
-      try {
-        const res = await api.get('/reports/doctor')
-        if (res.data.success) {
-          setReports(res.data.data)
-        }
-      } catch (err) {
-        console.error("Failed to fetch doctor reports:", err)
-      } finally {
-        setIsLoading(false)
-      }
-    }
     fetchReports()
   }, [])
+
+  const handleViewReport = (report) => {
+    setSelectedReport(report)
+    setEditForm({
+      summary: report.summary || "",
+      prescription: report.prescription || ""
+    })
+    setIsReportModalOpen(true)
+  }
+
+  const handleSaveEdits = async () => {
+    try {
+      await api.put(`/reports/${selectedReport._id}`, editForm)
+      toast.success("Draft saved successfully")
+      fetchReports()
+      setIsReportModalOpen(false)
+    } catch (err) {
+      toast.error("Failed to save report")
+    }
+  }
+
+  const handleApproveReport = async () => {
+    try {
+      // First save any pending edits
+      await api.put(`/reports/${selectedReport._id}`, editForm)
+      // Then approve and send to patient
+      await api.put(`/reports/${selectedReport._id}/status`, { status: 'Sent to Patient' })
+      toast.success("Report approved and sent to patient!")
+      fetchReports()
+      setIsReportModalOpen(false)
+    } catch (err) {
+      toast.error("Failed to approve report")
+    }
+  }
+
 
   const filteredReports = reports.filter(r => 
     r.title?.toLowerCase().includes(searchQuery.toLowerCase()) || 
@@ -73,7 +116,10 @@ export default function DoctorReports() {
                   <div>
                     <div className="flex items-center gap-3 mb-1">
                       <h3 className="text-lg font-semibold text-slate-900">{report.title || 'Medical Report'}</h3>
-                      <Badge variant={report.status === 'Approved' ? 'success' : 'warning'}>
+                      <Badge variant={
+                        report.status === 'Approved' || report.status === 'Sent to Patient' ? 'success' : 
+                        report.status === 'Draft by AI' ? 'warning' : 'secondary'
+                      }>
                         {report.status}
                       </Badge>
                     </div>
@@ -86,10 +132,10 @@ export default function DoctorReports() {
                 </div>
 
                 <div className="p-6 sm:w-48 flex flex-row sm:flex-col items-center justify-center gap-2 bg-slate-50 border-t sm:border-t-0 sm:border-l border-slate-100">
-                  <Button variant="outline" size="sm" className="w-full gap-2 border-slate-200">
-                    <Eye className="h-4 w-4" /> View
+                  <Button variant="outline" size="sm" className="w-full gap-2 border-slate-200" onClick={() => handleViewReport(report)}>
+                    <Eye className="h-4 w-4" /> View / Edit
                   </Button>
-                  <Button variant="outline" size="sm" className="w-full gap-2 border-slate-200">
+                  <Button variant="outline" size="sm" className="w-full gap-2 border-slate-200" disabled={report.status === 'Draft by AI'}>
                     <Download className="h-4 w-4" /> PDF
                   </Button>
                 </div>
@@ -108,6 +154,52 @@ export default function DoctorReports() {
           </div>
         )}
       </div>
+
+      <Modal isOpen={isReportModalOpen} onClose={() => setIsReportModalOpen(false)} title={selectedReport?.status === 'Draft by AI' ? "Review AI Draft Report" : "Report Details"}>
+        {selectedReport && (
+          <div className="space-y-4">
+            <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 mb-4">
+              <p className="text-sm text-slate-500 font-medium uppercase mb-1">Patient</p>
+              <p className="text-lg font-bold text-slate-900">{selectedReport.patient?.fullName}</p>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-bold text-slate-700">Clinical Summary & Diagnosis</label>
+              <textarea 
+                className="w-full min-h-[100px] p-3 rounded-lg border border-slate-200 focus:ring-2 focus:ring-teal-500 text-slate-900"
+                value={editForm.summary}
+                onChange={(e) => setEditForm({...editForm, summary: e.target.value})}
+                disabled={selectedReport.status === 'Approved' || selectedReport.status === 'Sent to Patient'}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-bold text-slate-700">Recommended Prescription / Actions</label>
+              <textarea 
+                className="w-full min-h-[80px] p-3 rounded-lg border border-slate-200 focus:ring-2 focus:ring-teal-500 text-slate-900"
+                value={editForm.prescription}
+                onChange={(e) => setEditForm({...editForm, prescription: e.target.value})}
+                disabled={selectedReport.status === 'Approved' || selectedReport.status === 'Sent to Patient'}
+              />
+            </div>
+
+            {(selectedReport.status !== 'Approved' && selectedReport.status !== 'Sent to Patient') ? (
+              <div className="pt-4 flex justify-end gap-3 border-t border-slate-100">
+                <Button variant="outline" onClick={() => handleSaveEdits()}>Save Draft</Button>
+                <Button className="bg-teal-600 hover:bg-teal-700" onClick={() => handleApproveReport()}>
+                  <CheckCircle2 className="h-4 w-4 mr-2" /> Approve & Send to Patient
+                </Button>
+              </div>
+            ) : (
+              <div className="pt-4 flex justify-end border-t border-slate-100">
+                <Button onClick={() => setIsReportModalOpen(false)}>Close</Button>
+              </div>
+            )}
+          </div>
+        )}
+      </Modal>
+
     </div>
   )
 }
+
