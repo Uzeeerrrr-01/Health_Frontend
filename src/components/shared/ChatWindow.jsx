@@ -3,8 +3,15 @@
 import { useState, useRef, useEffect } from "react"
 import { Button } from "@/components/ui/Button"
 import { Input } from "@/components/ui/Input"
-import { Send, Mic, Paperclip, MoreVertical, RefreshCw } from "lucide-react"
+import { Send, Mic, Paperclip, MoreVertical } from "lucide-react"
 import { cn } from "@/lib/utils"
+
+const formatTime = (timeStr) => {
+  if (!timeStr) return ""
+  const d = new Date(timeStr)
+  if (isNaN(d.getTime())) return ""
+  return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true })
+}
 
 export function ChatWindow({ 
   messages, 
@@ -37,10 +44,10 @@ export function ChatWindow({
   return (
     <div className="flex flex-col h-full bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-slate-200 bg-white">
+      <div className="flex items-center justify-between p-4 border-b border-slate-200 bg-white shrink-0">
         <div>
-          <h2 className="text-lg font-semibold text-slate-900">{title}</h2>
-          {subtitle && <p className="text-sm text-slate-500">{subtitle}</p>}
+          <h2 className="text-base font-bold text-slate-900">{title}</h2>
+          {subtitle && <p className="text-xs text-slate-500 mt-0.5">{subtitle}</p>}
         </div>
         <div className="flex items-center gap-2">
           {headerRight}
@@ -51,24 +58,34 @@ export function ChatWindow({
       </div>
 
       {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-6 bg-slate-50/50 scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
+      <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50/50 scrollbar-thin scrollbar-thumb-slate-250 scrollbar-track-transparent">
         {messages.map((msg, index) => (
           <div 
             key={index} 
             className={cn(
-              "flex max-w-[80%]",
+              "flex max-w-[85%]",
               msg.sender === "user" ? "ml-auto justify-end" : "mr-auto justify-start"
             )}
           >
             <div 
               className={cn(
-                "rounded-2xl px-4 py-3 text-sm shadow-sm",
+                "rounded-2xl px-4 py-2.5 text-sm shadow-sm flex flex-col relative gap-1 min-w-[80px]",
                 msg.sender === "user" 
                   ? "bg-teal-600 text-white rounded-tr-none" 
                   : "bg-white border border-slate-200 text-slate-800 rounded-tl-none"
               )}
             >
-              {msg.content}
+              <div className="leading-relaxed break-words">{msg.content}</div>
+              {msg.timestamp && (
+                <span 
+                  className={cn(
+                    "text-[9px] self-end leading-none mt-0.5 select-none font-medium tracking-wide",
+                    msg.sender === "user" ? "text-teal-200" : "text-slate-400"
+                  )}
+                >
+                  {formatTime(msg.timestamp)}
+                </span>
+              )}
               {msg.options && (
                 <div className="mt-3 flex flex-wrap gap-2">
                   {msg.options.map((opt, i) => (
@@ -86,7 +103,7 @@ export function ChatWindow({
           </div>
         ))}
         {isTyping && (
-          <div className="flex max-w-[80%] mr-auto justify-start">
+          <div className="flex max-w-[85%] mr-auto justify-start">
              <div className="rounded-2xl px-4 py-3 bg-white border border-slate-200 rounded-tl-none shadow-sm flex items-center gap-1.5">
                <span className="w-2 h-2 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: '0ms' }} />
                <span className="w-2 h-2 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: '150ms' }} />
@@ -98,7 +115,7 @@ export function ChatWindow({
       </div>
 
       {/* Input Area */}
-      <div className="p-4 bg-white border-t border-slate-200">
+      <div className="p-4 bg-white border-t border-slate-200 shrink-0">
         <form onSubmit={handleSend} className="flex items-center gap-2">
           <Button type="button" variant="ghost" size="icon" className="text-slate-400 shrink-0">
             <Paperclip className="h-5 w-5" />
@@ -107,7 +124,7 @@ export function ChatWindow({
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder={placeholder}
-            className="flex-1 bg-slate-50 border-transparent focus-visible:ring-teal-600 focus-visible:bg-white rounded-full px-4"
+            className="flex-1 bg-slate-50 border-transparent focus-visible:ring-teal-600 focus-visible:bg-white rounded-full px-4 text-sm py-2"
           />
           {input.trim() ? (
             <Button type="submit" size="icon" className="shrink-0 rounded-full h-10 w-10 bg-teal-600 hover:bg-teal-700">

@@ -42,6 +42,16 @@ export default function AdminAppointments() {
 
   useEffect(() => {
     fetchAppointments()
+
+    const handleCancelledEvent = () => {
+      console.log("[AdminAppointments] Received appointmentCancelledAdmin custom event. Hot-reloading...");
+      fetchAppointments()
+    }
+    window.addEventListener("appointmentCancelledAdmin", handleCancelledEvent)
+
+    return () => {
+      window.removeEventListener("appointmentCancelledAdmin", handleCancelledEvent)
+    }
   }, [])
 
   const filteredAppointments = useMemo(() => {

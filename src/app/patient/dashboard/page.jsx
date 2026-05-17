@@ -56,8 +56,18 @@ export default function PatientDashboard() {
       }
     }
     fetchDashboardData()
+
+    const handleCancelledEvent = () => {
+      console.log("[PatientDashboard] Received appointmentCancelled custom event. Hot-reloading...");
+      fetchDashboardData()
+    }
+    window.addEventListener("appointmentCancelled", handleCancelledEvent)
+
     const interval = setInterval(fetchDashboardData, 30000) // Poll every 30s
-    return () => clearInterval(interval)
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener("appointmentCancelled", handleCancelledEvent)
+    }
   }, [])
 
   const upcomingAppointments = appointments.filter(a => 

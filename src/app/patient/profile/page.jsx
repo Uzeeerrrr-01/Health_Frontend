@@ -115,6 +115,8 @@ export default function ProfileSettings() {
         const base = stored.user || stored
         base.avatar = res.data.data.avatar
         sessionStorage.setItem("user", JSON.stringify({ ...stored, ...base }))
+        // Trigger AuthContext update in real-time
+        window.dispatchEvent(new CustomEvent("profileUpdated"))
         // Update preview to the server URL
         setAvatarPreview(`${BACKEND_URL}/uploads/${res.data.data.avatar}`)
       }
@@ -152,6 +154,8 @@ export default function ProfileSettings() {
         const base = stored.user || stored
         const updated = { ...base, ...res.data.data }
         sessionStorage.setItem("user", JSON.stringify(updated))
+        // Trigger AuthContext update in real-time
+        window.dispatchEvent(new CustomEvent("profileUpdated"))
         setIsEditing(false)
       }
     } catch (err) {
@@ -278,14 +282,30 @@ export default function ProfileSettings() {
                         <><Upload className="mr-2 h-4 w-4" /> Change Photo</>
                       )}
                     </Button>
-                    <Button variant="ghost" size="icon" className="text-slate-400 hover:text-slate-600">
-                      <MoreVertical className="h-5 w-5" />
+                    <Button
+                      onClick={() => setIsEditing(true)}
+                      className="bg-teal-600 hover:bg-teal-700 text-white font-medium shadow-sm"
+                    >
+                      <Edit3 className="mr-2 h-4 w-4" /> Edit Profile
                     </Button>
                   </>
                 ) : (
-                  <Button variant="ghost" size="icon" onClick={handleDiscard} className="text-slate-400 hover:text-slate-600">
-                    <X className="h-5 w-5" />
-                  </Button>
+                  <>
+                    <Button 
+                      variant="outline" 
+                      onClick={handleDiscard} 
+                      className="border-slate-200 text-slate-600 hover:bg-slate-50 shadow-sm"
+                    >
+                      Discard
+                    </Button>
+                    <Button
+                      onClick={handleSave}
+                      disabled={isLoading}
+                      className="bg-teal-600 hover:bg-teal-700 text-white shadow-sm font-medium"
+                    >
+                      {isLoading ? "Saving..." : "Save Changes"}
+                    </Button>
+                  </>
                 )}
               </div>
             </CardHeader>

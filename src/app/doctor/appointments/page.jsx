@@ -63,15 +63,15 @@ export default function DoctorAppointments() {
     }
   }
 
-  const handleCancel = async (id) => {
-    if (!confirm("Are you sure you want to cancel this appointment?")) return;
+  const handleDelete = async (id) => {
+    if (!confirm("Are you sure you want to delete this appointment?")) return;
     try {
       await api.put(`/appointments/${id}`, { status: 'cancelled' })
       fetchAppointments()
-      toast.success("Appointment cancelled successfully.")
+      toast.success("Appointment deleted successfully.")
     } catch (err) {
-      console.error("Failed to cancel appointment", err)
-      toast.error("Failed to cancel appointment")
+      console.error("Failed to delete appointment", err)
+      toast.error("Failed to delete appointment")
     }
   }
 
@@ -165,13 +165,8 @@ export default function DoctorAppointments() {
                       {apt.status !== 'cancelled' && apt.status !== 'completed' && (
                         <>
                           <Button variant="outline" size="sm" onClick={() => handleOpenReschedule(apt)}>Reschedule</Button>
-                          <Button variant="ghost" size="sm" onClick={() => handleCancel(apt._id)} className="text-red-600 hover:text-red-700 hover:bg-red-50">Cancel</Button>
+                          <Button variant="ghost" size="sm" onClick={() => handleDelete(apt._id)} className="text-red-600 hover:text-red-700 hover:bg-red-50">Delete</Button>
                         </>
-                      )}
-                      {apt.status === 'confirmed' && (
-                        <Button size="sm" className="gap-2">
-                          <Video className="h-4 w-4" /> Start Call
-                        </Button>
                       )}
                     </div>
                   </div>

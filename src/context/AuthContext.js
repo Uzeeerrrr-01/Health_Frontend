@@ -92,6 +92,23 @@ export function AuthProvider({ children }) {
     }
   }, [authLoaded, token])
 
+  // Listen to profile updates to sync state in real-time across the app
+  useEffect(() => {
+    const handleProfileUpdated = () => {
+      console.log("[AuthContext] Profile updated event received. Synching user state...");
+      const storedUser = sessionStorage.getItem('user')
+      if (storedUser) {
+        try {
+          setUser(JSON.parse(storedUser))
+        } catch (e) {
+          console.error("[AuthContext] Failed to parse updated user from storage", e)
+        }
+      }
+    }
+    window.addEventListener("profileUpdated", handleProfileUpdated)
+    return () => window.removeEventListener("profileUpdated", handleProfileUpdated)
+  }, [])
+
   const login = (userData, userToken, userRole) => {
     console.log("[AuthContext] login() called with role:", userRole);
     

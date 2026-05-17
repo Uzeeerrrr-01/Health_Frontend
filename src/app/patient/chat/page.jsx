@@ -37,9 +37,15 @@ export default function DoctorChat() {
         setDoctor(docRes.data.data)
 
         // Request or get existing chat
+        console.log(`[Chat Request] patient clicked Start Chat with doctorId: ${doctorId}`);
         const chatRes = await api.post('/chats/request', { doctorId })
         setChat(chatRes.data.data)
-        setMessages(chatRes.data.data.messages || [])
+        const formatted = (chatRes.data.data.messages || []).map(m => ({
+          sender: m.senderModel === 'Doctor' ? 'doctor' : 'user',
+          content: m.content,
+          timestamp: m.timestamp
+        }))
+        setMessages(formatted)
         
         if (chatRes.data.data.status === 'ended') setConsultationEnded(true)
 
@@ -74,7 +80,8 @@ export default function DoctorChat() {
           // Map backend message format to frontend
           const formattedMessages = updatedChat.messages.map(m => ({
             sender: m.senderModel === 'Doctor' ? 'doctor' : 'user',
-            content: m.content
+            content: m.content,
+            timestamp: m.timestamp
           }))
           setMessages(formattedMessages)
 
@@ -95,7 +102,8 @@ export default function DoctorChat() {
       // Backend returns updated chat
       const formattedMessages = res.data.data.messages.map(m => ({
         sender: m.senderModel === 'Doctor' ? 'doctor' : 'user',
-        content: m.content
+        content: m.content,
+        timestamp: m.timestamp
       }))
       setMessages(formattedMessages)
     } catch (err) {
@@ -327,13 +335,20 @@ export default function DoctorChat() {
                             {isDoctor ? `Dr. ${doctor.fullName}` : 'You'}
                           </span>
                           <div 
-                            className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm shadow-sm ${
+                            className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm shadow-sm relative ${
                               isDoctor 
                                 ? 'bg-white text-slate-800 border border-slate-100 rounded-tl-none' 
                                 : 'bg-teal-600 text-white rounded-tr-none'
                             }`}
                           >
-                            {m.content}
+                            <div>{m.content}</div>
+                            {m.timestamp && (
+                              <div className={`text-[9px] mt-1 text-right leading-none ${
+                                isDoctor ? 'text-slate-400' : 'text-teal-200'
+                              }`}>
+                                {new Date(m.timestamp).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true })}
+                              </div>
+                            )}
                           </div>
                         </div>
                       )

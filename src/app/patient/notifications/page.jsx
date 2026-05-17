@@ -29,6 +29,16 @@ export default function NotificationsPage() {
 
   useEffect(() => {
     fetchNotifications()
+
+    const handleCancelledEvent = () => {
+      console.log("[NotificationsPage] Received appointmentCancelled custom event. Hot-reloading...");
+      fetchNotifications()
+    }
+    window.addEventListener("appointmentCancelled", handleCancelledEvent)
+
+    return () => {
+      window.removeEventListener("appointmentCancelled", handleCancelledEvent)
+    }
   }, [])
 
   const handleMarkAsRead = async (id) => {

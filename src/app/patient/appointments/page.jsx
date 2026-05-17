@@ -30,6 +30,59 @@ export default function AppointmentsPage() {
     reason: ""
   })
 
+  const selectedDoc = doctors.find(d => d._id === formData.doctor);
+
+  const getAvailabilityText = (doc) => {
+    if (!doc.weeklyAvailability || doc.weeklyAvailability.length === 0) {
+      return "Monday till Friday (09:00 AM - 05:00 PM)";
+    }
+    const availableDays = doc.weeklyAvailability
+      .filter(d => d.available)
+      .map(d => d.day);
+
+    if (availableDays.length === 0) {
+      return "Not accepting appointments";
+    }
+
+    const standardOrder = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+    const activeDays = standardOrder.filter(d => availableDays.includes(d));
+
+    let availabilityString = "";
+    if (activeDays.length === 1) {
+      availabilityString = activeDays[0];
+    } else {
+      const indices = activeDays.map(d => standardOrder.indexOf(d));
+      let isContinuous = true;
+      for (let k = 1; k < indices.length; k++) {
+        if (indices[k] !== indices[k - 1] + 1) {
+          isContinuous = false;
+          break;
+        }
+      }
+      if (isContinuous && activeDays.length > 1) {
+        availabilityString = `${activeDays[0]} till ${activeDays[activeDays.length - 1]}`;
+      } else {
+        availabilityString = `${activeDays.slice(0, -1).join(', ')} and ${activeDays[activeDays.length - 1]}`;
+      }
+    }
+
+    const firstActiveDay = doc.weeklyAvailability.find(d => d.available);
+    let timeRange = "";
+    if (firstActiveDay && firstActiveDay.startTime && firstActiveDay.endTime) {
+      const format12h = (timeStr) => {
+        if (!timeStr) return "";
+        const [h, m] = timeStr.split(":");
+        const hr = parseInt(h);
+        const ampm = hr >= 12 ? "PM" : "AM";
+        const hr12 = hr % 12 || 12;
+        return `${hr12}:${m} ${ampm}`;
+      };
+      timeRange = ` (${format12h(firstActiveDay.startTime)} - ${format12h(firstActiveDay.endTime)})`;
+    }
+
+    return `${availabilityString}${timeRange}`;
+  };
+
   const fetchAppointments = async () => {
     const token = sessionStorage.getItem('token');
     const role = sessionStorage.getItem('role');
@@ -73,8 +126,18 @@ export default function AppointmentsPage() {
   useEffect(() => {
     fetchAppointments()
     fetchDoctors()
+
+    const handleCancelledEvent = () => {
+      console.log("[AppointmentsPage] Received appointmentCancelled custom event. Hot-reloading...");
+      fetchAppointments()
+    }
+    window.addEventListener("appointmentCancelled", handleCancelledEvent)
+
     const interval = setInterval(fetchAppointments, 10000) // Poll every 10s
-    return () => clearInterval(interval)
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener("appointmentCancelled", handleCancelledEvent)
+    }
   }, [])
 
   // ── Appointment-time popup checker ─────────────────────────────
@@ -383,6 +446,17 @@ export default function AppointmentsPage() {
                 </option>
               ))}
             </select>
+            {selectedDoc && (
+              <div className="p-3 bg-teal-50 border border-teal-100 rounded-xl flex items-start gap-2.5 mt-1.5 animate-in slide-in-from-top-1 fade-in duration-200">
+                <CalendarIcon className="h-4 w-4 text-teal-600 shrink-0 mt-0.5" />
+                <div className="text-xs">
+                  <span className="font-bold text-teal-800">Doctor Availability: </span>
+                  <span className="text-slate-600 font-medium capitalize">
+                    {getAvailabilityText(selectedDoc)}
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">

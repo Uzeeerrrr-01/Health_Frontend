@@ -10,11 +10,12 @@ import { MessageSquare, Clock, Check, Calendar } from "lucide-react"
 import api from "@/lib/api"
 import { useAuth } from "@/context/AuthContext"
 import { toast } from "react-hot-toast"
+import { io } from "socket.io-client"
 
 export default function DoctorLayout({ children }) {
   const router = useRouter()
   const pathname = usePathname()
-  const { role, token, authLoaded } = useAuth()
+  const { user, role, token, authLoaded } = useAuth()
   const [isReady, setIsReady] = useState(false)
   
   // Consultation Request State
@@ -34,7 +35,52 @@ export default function DoctorLayout({ children }) {
     }
   }, [authLoaded, token, role, router])
 
-  // Polling for incoming consultation requests
+  // Socket.io Setup
+  useEffect(() => {
+    let socket;
+    const doctorId = user?._id || user?.id;
+    if (isReady && role === 'doctor' && doctorId) {
+      console.log(`[Socket] Doctor socket connected with doctorId: ${doctorId}`);
+      
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+      const socketUrl = apiBase.replace('/api', '');
+
+      socket = io(socketUrl, {
+        withCredentials: true,
+        transports: ['websocket', 'polling']
+      });
+
+      socket.on("connect", () => {
+        console.log(`[Socket] Doctor joined room: doctor_${doctorId}`);
+        socket.emit("joinRoom", `doctor_${doctorId}`);
+      });
+
+      socket.on("connect_error", (err) => {
+        console.error("[Socket] Doctor connection error:", err);
+      });
+
+      socket.on("newChatRequest", (chatData) => {
+        console.log(`[Socket] Doctor received newChatRequest event:`, chatData);
+        // Only show if the chat status is requested (pending)
+        if (chatData.status === 'requested') {
+          setIncomingRequest(chatData);
+          toast.success("New consultation request!");
+        }
+      });
+
+      socket.on("disconnect", () => {
+        console.log("[Socket] Doctor disconnected");
+      });
+    }
+
+    return () => {
+      if (socket) {
+        socket.disconnect();
+      }
+    };
+  }, [isReady, role, user]);
+
+  // Polling for incoming consultation requests (Fallback)
   useEffect(() => {
     let interval;
     if (isReady && role === 'doctor') {

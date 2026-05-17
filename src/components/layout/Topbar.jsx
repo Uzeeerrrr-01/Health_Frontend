@@ -179,14 +179,18 @@ export function Topbar({ role: propsRole }) {
           </div>
           <div className="h-9 w-9 rounded-full bg-teal-100 flex items-center justify-center overflow-hidden border border-slate-200 shadow-sm">
             {user?.avatar ? (
-              <img src={user.avatar} alt={user.fullName || user.name} className="h-full w-full object-cover" />
+              <img 
+                src={user.avatar.startsWith("http") ? user.avatar : `${process.env.NEXT_PUBLIC_API_URL?.replace("/api", "") || "http://localhost:5000"}/uploads/${user.avatar}`} 
+                alt={user.fullName || user.name} 
+                className="h-full w-full object-cover" 
+              />
             ) : (
               <User className="h-5 w-5 text-teal-600" />
             )}
           </div>
           <button 
             onClick={logout}
-            className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors rounded-full" 
+            className="p-2 text-red-500 hover:text-red-600 hover:bg-red-50 transition-colors rounded-full" 
             title="Logout"
           >
             <LogOut className="h-5 w-5" />

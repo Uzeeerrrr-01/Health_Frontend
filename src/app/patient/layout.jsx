@@ -5,13 +5,14 @@ import { useRouter, usePathname } from "next/navigation"
 import { Sidebar } from "@/components/layout/Sidebar"
 import { Topbar } from "@/components/layout/Topbar"
 import api from "@/lib/api"
-
 import { useAuth } from "@/context/AuthContext"
+import { toast } from "react-hot-toast"
+import { io } from "socket.io-client"
 
 export default function PatientLayout({ children }) {
   const router = useRouter()
   const pathname = usePathname()
-  const { role, token, authLoaded } = useAuth()
+  const { user, role, token, authLoaded } = useAuth()
   const [isReady, setIsReady] = useState(false)
 
   useEffect(() => {
@@ -26,6 +27,68 @@ export default function PatientLayout({ children }) {
       }
     }
   }, [authLoaded, token, role, router])
+
+  // Socket.io Setup for Patient Notifications
+  useEffect(() => {
+    let socket;
+    const patientId = user?._id || user?.id;
+    if (isReady && role === 'patient' && patientId) {
+      console.log(`[Socket] Patient socket connected with patientId: ${patientId}`);
+      
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+      const socketUrl = apiBase.replace('/api', '');
+
+      socket = io(socketUrl, {
+        withCredentials: true,
+        transports: ['websocket', 'polling']
+      });
+
+      socket.on("connect", () => {
+        console.log(`[Socket] Patient joined room: patient_${patientId}`);
+        socket.emit("joinRoom", `patient_${patientId}`);
+      });
+
+      socket.on("connect_error", (err) => {
+        console.error("[Socket] Patient connection error:", err);
+      });
+
+      socket.on("appointmentCancelled", (data) => {
+        console.log(`[Socket] Patient received appointmentCancelled event:`, data);
+        toast.error((t) => (
+          <div 
+            onClick={() => toast.dismiss(t.id)} 
+            className="flex items-center justify-between w-full cursor-pointer select-none"
+            title="Click to dismiss"
+          >
+            <span>{data.message}</span>
+            <span className="ml-3 text-red-800 hover:text-red-950 font-extrabold text-sm flex-shrink-0">✕</span>
+          </div>
+        ), {
+          duration: 10000,
+          position: "top-right",
+          style: {
+            border: '1px solid #ef4444',
+            padding: '16px',
+            color: '#7f1d1d',
+            background: '#fef2f2',
+            fontWeight: 'bold'
+          }
+        });
+        // Dispatch custom event to let active pages (like appointments) hot-reload their list!
+        window.dispatchEvent(new CustomEvent("appointmentCancelled", { detail: data }));
+      });
+
+      socket.on("disconnect", () => {
+        console.log("[Socket] Patient disconnected");
+      });
+    }
+
+    return () => {
+      if (socket) {
+        socket.disconnect();
+      }
+    };
+  }, [isReady, role, user]);
 
   if (!authLoaded || !isReady) {
     return (
