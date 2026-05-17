@@ -25,31 +25,35 @@ api.interceptors.request.use(
 );
 
 // Response interceptor for generic error handling
+// Handle API errors globally
 api.interceptors.response.use(
-  (response) => {
-    return response;
-  },
+  (response) => response,
   (error) => {
-    let message = 'An unexpected error occurred';
-    
-    if (error.response) {
-      // Server responded with error
-      if (error.response.status === 401) {
-        if (typeof window !== 'undefined') {
-          sessionStorage.clear();
+    // Check if error response exists
+    if (error.response?.status === 401) {
+      if (typeof window !== "undefined") {
+        const currentPath = window.location.pathname;
+
+        // Prevent redirect loop on auth pages
+        const isAuthPage =
+          currentPath.includes("/auth/login") ||
+          currentPath.includes("/auth/register") ||
+          currentPath.includes("/auth/forgot-password") ||
+          currentPath.includes("/auth/reset-password");
+
+        // Only logout for protected routes
+        if (!isAuthPage) {
+          localStorage.removeItem("token");
+          localStorage.removeItem("user");
+          localStorage.removeItem("role");
+
+          window.location.href = "/auth/login";
         }
       }
-      message = error.response.data?.message || error.response.data?.error || error.response.statusText || message;
-    } else if (error.request) {
-      // Request made but no response
-      message = 'No response from server. Please check your connection.';
-    } else {
-      message = error.message;
     }
-    
-    console.error('API Error:', message, error);
-    return Promise.reject(message);
+
+    // Always reject error
+    return Promise.reject(error);
   }
 );
-
 export default api;

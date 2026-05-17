@@ -25,7 +25,7 @@ export default function SymptomChecker() {
   const handleSendMessage = async (content) => {
     // Clear previous error
     setError("")
-    
+
     // Add user message
     const newMessages = [...messages, { sender: "user", content }]
     setMessages(newMessages)
@@ -45,7 +45,7 @@ export default function SymptomChecker() {
 
       if (res.data.success && res.data.data) {
         const aiResponse = res.data.data
-        
+
         if (aiResponse.followUpQuestion) {
           setMessages(prev => [...prev, {
             sender: "ai",
@@ -63,12 +63,10 @@ export default function SymptomChecker() {
         throw new Error("Invalid AI response")
       }
     } catch (error) {
-      console.error("AI check failed:", error)
-      const errorMessage = error.message || "I'm having trouble connecting to the medical brain right now. Please try again or consult a doctor if it's urgent.";
-      setError(errorMessage)
+
       setMessages(prev => [...prev, {
         sender: "ai",
-        content: "I apologize, but I encountered an error while analyzing your symptoms. Please check your connection or try again later.",
+        content: `Error: ${errorMessage}. Please check your AI API key or connection.`,
       }])
     } finally {
       setIsTyping(false)
@@ -92,7 +90,7 @@ export default function SymptomChecker() {
             {error}
           </div>
         )}
-        <ChatWindow 
+        <ChatWindow
           title="AI Symptom Checker"
           subtitle="Get an initial assessment based on your symptoms"
           messages={messages}
@@ -131,7 +129,7 @@ export default function SymptomChecker() {
               <h3 className="font-semibold text-slate-900 mb-4 flex items-center gap-2">
                 <Activity className="h-4 w-4 text-teal-600" /> Possible Conditions
               </h3>
-              
+
               <div className="space-y-4">
                 <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
                   <div className="flex justify-between items-start mb-1">
@@ -161,11 +159,10 @@ export default function SymptomChecker() {
                     <div key={i} className="p-3 rounded-lg border border-slate-100 bg-slate-50 space-y-1.5">
                       <div className="flex items-center justify-between">
                         <span className="font-semibold text-slate-900 text-sm">{rx.name}</span>
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide ${
-                          rx.type === "OTC"
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide ${rx.type === "OTC"
                             ? "bg-emerald-100 text-emerald-700"
                             : "bg-violet-100 text-violet-700"
-                        }`}>
+                          }`}>
                           {rx.type}
                         </span>
                       </div>
