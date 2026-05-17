@@ -166,10 +166,29 @@ export default function AdminAuditLogs() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <div className="max-w-[250px] overflow-hidden text-ellipsis">
-                          <pre className="text-[10px] text-slate-500 bg-slate-50 p-1.5 rounded border border-slate-100 font-sans whitespace-pre-wrap">
-                            {JSON.stringify(log.details, null, 1)}
-                          </pre>
+                        <div className="w-[260px] h-[76px]">
+                          {log.details && Object.keys(log.details).length > 0 ? (
+                            <div className="bg-slate-50 rounded-lg p-3 border border-slate-100 flex flex-col justify-center gap-2 shadow-sm w-full h-full overflow-hidden">
+                              {Object.entries(log.details).map(([key, value]) => (
+                                <div key={key} className="flex items-start gap-2 text-xs leading-tight shrink-0">
+                                  <span className="font-medium text-slate-700 capitalize whitespace-nowrap">
+                                    {key.replace(/([A-Z])/g, ' $1').trim()}:
+                                  </span>
+                                  <span className="text-slate-600 break-words truncate">
+                                    {typeof value === 'object' && value !== null 
+                                      ? Array.isArray(value) 
+                                        ? value.join(', ') 
+                                        : Object.entries(value).map(([k, v]) => `${k}: ${v}`).join(', ')
+                                      : String(value)}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="flex items-center w-full h-full px-3 text-xs text-slate-400 italic">
+                              No additional details
+                            </div>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
