@@ -13,7 +13,7 @@ export default function EmergencySOS() {
   
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const storedUser = localStorage.getItem('user')
+      const storedUser = sessionStorage.getItem('user')
       if (storedUser) {
         const parsed = JSON.parse(storedUser)
         setUser(parsed.user || parsed)
@@ -24,9 +24,24 @@ export default function EmergencySOS() {
   const handleEmergencyAlert = async () => {
     setIsAlerting(true)
     try {
-      // Mock coordinates for demo (e.g. New York)
-      const latitude = 40.7128;
-      const longitude = -74.0060;
+      let latitude = 40.7128; // Fallback default (NY)
+      let longitude = -74.0060;
+
+      // Try to get actual GPS location
+      if (navigator.geolocation) {
+        try {
+          const pos = await new Promise((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(resolve, reject, { 
+              enableHighAccuracy: true, 
+              timeout: 10000 
+            });
+          });
+          latitude = pos.coords.latitude;
+          longitude = pos.coords.longitude;
+        } catch (geoErr) {
+          console.warn("Could not fetch real GPS coordinates, using fallback.", geoErr);
+        }
+      }
       
       const payload = {
         symptoms: "Patient initiated Emergency SOS",
@@ -44,7 +59,7 @@ export default function EmergencySOS() {
       }
     } catch (err) {
       console.error("Failed to send emergency alert:", err)
-      alert("Failed to send emergency alert.")
+      alert("Failed to send emergency alert. Please call 112 directly.")
     } finally {
       setIsAlerting(false)
     }

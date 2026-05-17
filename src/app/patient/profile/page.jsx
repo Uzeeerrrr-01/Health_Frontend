@@ -1,120 +1,394 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
+import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/Card"
 import { Button } from "@/components/ui/Button"
 import { Input, Label } from "@/components/ui/Input"
-import { User, Bell, Shield, Globe, Moon } from "lucide-react"
+import { User, Mail, Phone, Calendar, Droplet, MapPin, Edit3, Upload, MoreVertical, Check, Shield, X, Camera } from "lucide-react"
+import api from "@/lib/api"
+import { toast } from "react-hot-toast"
+
+const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL?.replace("/api", "") || "http://localhost:5000"
 
 export default function ProfileSettings() {
-  const [user, setUser] = useState({ name: "User", email: "" })
+  const [isLoading, setIsLoading] = useState(false)
+  const [isUploading, setIsUploading] = useState(false)
+  const [isEditing, setIsEditing] = useState(false)
+  const [savedForm, setSavedForm] = useState(null)
+  const [avatarPreview, setAvatarPreview] = useState(null)
+  const fileInputRef = useRef(null)
+
+  const [form, setForm] = useState({
+    fullName: "",
+    email: "",
+    phone: "",
+    dob: "",
+    bloodGroup: "",
+    address: "",
+    sex: "",
+    emergencyName: "",
+    emergencyPhone: "",
+    emergencyRelation: "",
+  })
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const stored = localStorage.getItem('user')
+    if (typeof window !== "undefined") {
+      const stored = sessionStorage.getItem("user")
       if (stored) {
         try {
           const parsed = JSON.parse(stored)
-          const userData = parsed.user || parsed
-          setUser({
-            ...userData,
-            name: userData.fullName || userData.name || "User",
-            email: userData.email || "",
-            avatar: userData.avatar || ""
-          })
+          const u = parsed.user || parsed
+          const ec = u.emergencyContact || {}
+          const initial = {
+            fullName: u.fullName || u.name || "",
+            email: u.email || "",
+            phone: u.phone || "",
+            dob: u.dob || "",
+            bloodGroup: u.bloodGroup || "",
+            address: u.address || "",
+            sex: u.sex || "",
+            emergencyName: ec.name || "",
+            emergencyPhone: ec.phone || "",
+            emergencyRelation: ec.relation || "",
+          }
+          setForm(initial)
+          setSavedForm(initial)
+          // Load avatar
+          if (u.avatar) {
+            setAvatarPreview(
+              u.avatar.startsWith("http") ? u.avatar : `${BACKEND_URL}/uploads/${u.avatar}`
+            )
+          }
         } catch (e) {
-          console.error("Failed to parse user from local storage")
+          console.error("Failed to parse session user")
         }
       }
     }
   }, [])
 
-  return (
-    <div className="space-y-6 max-w-4xl mx-auto">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900">Profile & Settings</h1>
-        <p className="text-slate-500">Manage your account preferences and personal information.</p>
+  const handleChange = (e) => {
+    setForm((prev) => ({ ...prev, [e.target.id]: e.target.value }))
+  }
+
+  const handleDiscard = () => {
+    if (savedForm) setForm(savedForm)
+    setIsEditing(false)
+  }
+
+  // ── Photo upload ──────────────────────────────────────────────
+  const handlePhotoClick = () => {
+    fileInputRef.current?.click()
+  }
+
+  const handleFileChange = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    // Validate type & size
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please select an image file (JPG, PNG, etc.)")
+      return
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("Image must be smaller than 5 MB")
+      return
+    }
+
+    // Instant local preview via FileReader
+    const reader = new FileReader()
+    reader.onloadend = () => setAvatarPreview(reader.result)
+    reader.readAsDataURL(file)
+
+    // Upload to backend
+    try {
+      setIsUploading(true)
+      const formData = new FormData()
+      formData.append("avatar", file)
+      const res = await api.patch("/auth/avatar", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      })
+      if (res.data.success) {
+        toast.success("Profile photo updated!")
+        // Persist avatar filename in session storage
+        const stored = JSON.parse(sessionStorage.getItem("user") || "{}")
+        const base = stored.user || stored
+        base.avatar = res.data.data.avatar
+        sessionStorage.setItem("user", JSON.stringify({ ...stored, ...base }))
+        // Update preview to the server URL
+        setAvatarPreview(`${BACKEND_URL}/uploads/${res.data.data.avatar}`)
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to upload photo")
+    } finally {
+      setIsUploading(false)
+      // reset so same file can be selected again
+      if (fileInputRef.current) fileInputRef.current.value = ""
+    }
+  }
+
+  // ── Profile save ─────────────────────────────────────────────
+  const handleSave = async () => {
+    try {
+      setIsLoading(true)
+      const res = await api.patch("/auth/profile", {
+        fullName: form.fullName,
+        email: form.email,
+        phone: form.phone,
+        sex: form.sex,
+        address: form.address,
+        dob: form.dob,
+        bloodGroup: form.bloodGroup,
+        emergencyContact: {
+          name: form.emergencyName,
+          phone: form.emergencyPhone,
+          relation: form.emergencyRelation,
+        },
+      })
+      if (res.data.success) {
+        toast.success("Profile updated successfully!")
+        setSavedForm({ ...form })
+        const stored = JSON.parse(sessionStorage.getItem("user") || "{}")
+        const base = stored.user || stored
+        const updated = { ...base, ...res.data.data }
+        sessionStorage.setItem("user", JSON.stringify(updated))
+        setIsEditing(false)
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to update profile")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const InfoRow = ({ icon: Icon, label, value }) => (
+    <div className="flex items-center justify-between py-2 border-b border-slate-50 last:border-0">
+      <div className="flex items-center gap-3 text-slate-500">
+        <Icon className="h-4 w-4" />
+        <span className="text-xs">{label}</span>
       </div>
+      <span className="text-xs font-medium text-slate-900">{value || "—"}</span>
+    </div>
+  )
 
-      <div className="flex flex-col md:flex-row gap-8">
-        {/* Settings Navigation Sidebar */}
-        <div className="w-full md:w-64 space-y-1">
-          <Button variant="ghost" className="w-full justify-start bg-slate-100 text-slate-900 font-medium">
-            <User className="mr-2 h-4 w-4" /> Personal Info
-          </Button>
-          <Button variant="ghost" className="w-full justify-start text-slate-600 hover:text-slate-900">
-            <Bell className="mr-2 h-4 w-4" /> Notifications
-          </Button>
-          <Button variant="ghost" className="w-full justify-start text-slate-600 hover:text-slate-900">
-            <Shield className="mr-2 h-4 w-4" /> Security
-          </Button>
-          <Button variant="ghost" className="w-full justify-start text-slate-600 hover:text-slate-900">
-            <Globe className="mr-2 h-4 w-4" /> Language
-          </Button>
-          <Button variant="ghost" className="w-full justify-start text-slate-600 hover:text-slate-900">
-            <Moon className="mr-2 h-4 w-4" /> Appearance
-          </Button>
-        </div>
+  return (
+    <div className="space-y-6 max-w-6xl mx-auto pb-10">
+      {/* Hidden file input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleFileChange}
+      />
 
-        {/* Settings Content */}
-        <div className="flex-1 space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Personal Information</CardTitle>
-              <CardDescription>Update your photo and personal details.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="flex items-center gap-6">
-                <div className="h-24 w-24 rounded-full overflow-hidden border-2 border-slate-100 bg-teal-100 flex items-center justify-center">
-                  {user.avatar ? (
-                    <img src={user.avatar} alt={user.name} className="h-full w-full object-cover" />
+      <div className="flex flex-col lg:flex-row gap-6">
+
+        {/* ── Left: Profile Summary ── */}
+        <div className="w-full lg:w-80 flex-shrink-0">
+          <Card className="overflow-hidden border-slate-200 shadow-sm h-full">
+            <div className="h-28 bg-teal-50 border-b border-teal-100"></div>
+
+            {/* Avatar with camera overlay */}
+            <div className="relative -mt-14 flex justify-center">
+              <div className="relative group">
+                <div className="h-28 w-28 rounded-full border-4 border-white bg-teal-100 flex items-center justify-center shadow-sm overflow-hidden">
+                  {avatarPreview ? (
+                    <img src={avatarPreview} alt="Profile" className="h-full w-full object-cover" />
                   ) : (
                     <User className="h-12 w-12 text-teal-600" />
                   )}
                 </div>
-                <div>
-                  <Button variant="outline" size="sm" className="mb-2 block">Change Photo</Button>
-                  <p className="text-xs text-slate-500">JPG, GIF or PNG. Max size 2MB.</p>
-                </div>
+                {/* Camera overlay on hover */}
+                <button
+                  onClick={handlePhotoClick}
+                  disabled={isUploading}
+                  className="absolute inset-0 rounded-full bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                >
+                  {isUploading ? (
+                    <span className="h-5 w-5 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                  ) : (
+                    <Camera className="h-6 w-6 text-white" />
+                  )}
+                </button>
+              </div>
+            </div>
+
+            <CardContent className="pt-4 text-center pb-6 px-6">
+              <div className="flex items-center justify-center gap-2 mb-1">
+                <h2 className="text-xl font-bold text-slate-900">{form.fullName || "Patient"}</h2>
+                <span className="inline-flex items-center rounded-full bg-teal-100 px-2 py-0.5 text-[10px] font-semibold text-teal-800 uppercase tracking-wide">
+                  Patient
+                </span>
               </div>
 
-              <div className="grid sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="fullName">Full Name</Label>
-                  <Input id="fullName" defaultValue={user.name} />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email Address</Label>
-                  <Input id="email" type="email" defaultValue={user.email} />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="phone">Phone Number</Label>
-                  <Input id="phone" type="tel" defaultValue={user.phone || ""} />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="dob">Date of Birth</Label>
-                  <Input id="dob" type="date" defaultValue={user.dob || ""} />
-                </div>
+              <div className="flex items-center justify-center gap-1.5 mt-2 text-sm text-slate-500">
+                <div className="h-2 w-2 rounded-full bg-emerald-500"></div>
+                Online
               </div>
 
-              <div className="pt-4 border-t border-slate-100 flex justify-end">
-                <Button>Save Changes</Button>
+              <div className="mt-8 space-y-1 text-sm text-left">
+                <InfoRow icon={Mail} label="Email" value={form.email} />
+                <InfoRow icon={Phone} label="Phone" value={form.phone} />
+                <InfoRow icon={Calendar} label="Date of Birth" value={form.dob} />
+                <InfoRow icon={Droplet} label="Blood Group" value={form.bloodGroup} />
+                <InfoRow icon={MapPin} label="Address" value={form.address} />
               </div>
-            </CardContent>
-          </Card>
-          
-          <Card>
-            <CardHeader>
-              <CardTitle>Delete Account</CardTitle>
-              <CardDescription>Permanently remove your account and all data.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button variant="danger" className="bg-red-50 text-red-600 hover:bg-red-100 border border-red-200">
-                Delete Account
+
+              <Button
+                onClick={() => setIsEditing(true)}
+                className="w-full mt-8 bg-teal-600 hover:bg-teal-700 text-white shadow-sm"
+              >
+                <Edit3 className="mr-2 h-4 w-4" /> Edit Profile
               </Button>
+              <Link href="/patient/profile/security" className="block w-full mt-2">
+                <Button variant="outline" className="w-full border-slate-200 text-slate-600 hover:bg-slate-50">
+                  <Shield className="mr-2 h-4 w-4" /> Security Settings
+                </Button>
+              </Link>
             </CardContent>
           </Card>
         </div>
+
+        {/* ── Right: Edit Form ── */}
+        <div className="flex-1">
+          <Card className="border-slate-200 shadow-sm h-full">
+            <CardHeader className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 pb-6 border-b border-slate-50">
+              <div>
+                <CardTitle className="text-xl text-slate-900">Personal Information</CardTitle>
+                <CardDescription className="text-slate-500">
+                  {isEditing ? "Make changes and click Save Changes." : "Update your personal details."}
+                </CardDescription>
+              </div>
+              <div className="flex items-center gap-2">
+                {!isEditing ? (
+                  <>
+                    <Button
+                      variant="outline"
+                      onClick={handlePhotoClick}
+                      disabled={isUploading}
+                      className="text-teal-700 border-teal-200 bg-teal-50 hover:bg-teal-100 shadow-sm transition-colors"
+                    >
+                      {isUploading ? (
+                        <span className="flex items-center gap-2">
+                          <span className="h-3.5 w-3.5 rounded-full border-2 border-teal-600 border-t-transparent animate-spin" />
+                          Uploading...
+                        </span>
+                      ) : (
+                        <><Upload className="mr-2 h-4 w-4" /> Change Photo</>
+                      )}
+                    </Button>
+                    <Button variant="ghost" size="icon" className="text-slate-400 hover:text-slate-600">
+                      <MoreVertical className="h-5 w-5" />
+                    </Button>
+                  </>
+                ) : (
+                  <Button variant="ghost" size="icon" onClick={handleDiscard} className="text-slate-400 hover:text-slate-600">
+                    <X className="h-5 w-5" />
+                  </Button>
+                )}
+              </div>
+            </CardHeader>
+
+            <CardContent className="space-y-8 pt-8">
+              <div className="grid sm:grid-cols-2 gap-x-8 gap-y-6">
+                <div className="space-y-2">
+                  <Label htmlFor="fullName" className="text-slate-700 font-medium text-sm">Full Name</Label>
+                  <Input id="fullName" value={form.fullName} onChange={handleChange} disabled={!isEditing} className="bg-slate-50/50 border-slate-200 focus:border-teal-500 focus:ring-teal-500 disabled:text-slate-600 disabled:cursor-default" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="email" className="text-slate-700 font-medium text-sm">Email Address</Label>
+                  <Input id="email" type="email" value={form.email} onChange={handleChange} disabled={!isEditing} className="bg-slate-50/50 border-slate-200 focus:border-teal-500 focus:ring-teal-500 disabled:text-slate-600 disabled:cursor-default" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="phone" className="text-slate-700 font-medium text-sm">Phone Number</Label>
+                  <Input id="phone" type="tel" value={form.phone} onChange={handleChange} disabled={!isEditing} placeholder="+92 312 3456789" className="bg-slate-50/50 border-slate-200 focus:border-teal-500 focus:ring-teal-500 disabled:text-slate-600 disabled:cursor-default" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="dob" className="text-slate-700 font-medium text-sm">Date of Birth</Label>
+                  <Input id="dob" value={form.dob} onChange={handleChange} disabled={!isEditing} placeholder="DD/MM/YYYY" className="bg-slate-50/50 border-slate-200 focus:border-teal-500 focus:ring-teal-500 disabled:text-slate-600 disabled:cursor-default" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="sex" className="text-slate-700 font-medium text-sm">Gender</Label>
+                  <select
+                    id="sex"
+                    value={form.sex}
+                    onChange={handleChange}
+                    disabled={!isEditing}
+                    className="flex h-10 w-full rounded-md border border-slate-200 bg-slate-50/50 px-3 py-2 text-sm text-slate-900 disabled:text-slate-600 disabled:cursor-default focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-teal-500 focus-visible:border-teal-500 transition-colors"
+                  >
+                    <option value="">Select gender</option>
+                    <option value="male">Male</option>
+                    <option value="female">Female</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="bloodGroup" className="text-slate-700 font-medium text-sm">Blood Group</Label>
+                  <select
+                    id="bloodGroup"
+                    value={form.bloodGroup}
+                    onChange={handleChange}
+                    disabled={!isEditing}
+                    className="flex h-10 w-full rounded-md border border-slate-200 bg-slate-50/50 px-3 py-2 text-sm text-slate-900 disabled:text-slate-600 disabled:cursor-default focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-teal-500 focus-visible:border-teal-500 transition-colors"
+                  >
+                    <option value="">Select blood group</option>
+                    {["A+","A-","B+","B-","AB+","AB-","O+","O-"].map(g => (
+                      <option key={g} value={g}>{g}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="address" className="text-slate-700 font-medium text-sm">Address</Label>
+                  <Input id="address" value={form.address} onChange={handleChange} disabled={!isEditing} className="bg-slate-50/50 border-slate-200 focus:border-teal-500 focus:ring-teal-500 disabled:text-slate-600 disabled:cursor-default" />
+                </div>
+              </div>
+
+              {/* Emergency Contact */}
+              <div className="p-6 bg-slate-50/80 rounded-xl border border-slate-100/60 shadow-sm mt-4">
+                <h3 className="text-sm font-semibold text-teal-700 mb-4 tracking-wide">Emergency Contact</h3>
+                <div className="grid sm:grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="emergencyName" className="text-slate-600 text-xs font-medium">Contact Name</Label>
+                    <Input id="emergencyName" value={form.emergencyName} onChange={handleChange} disabled={!isEditing} className="bg-white border-slate-200 text-sm h-9 disabled:text-slate-600 disabled:cursor-default" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="emergencyPhone" className="text-slate-600 text-xs font-medium">Phone Number</Label>
+                    <Input id="emergencyPhone" value={form.emergencyPhone} onChange={handleChange} disabled={!isEditing} className="bg-white border-slate-200 text-sm h-9 disabled:text-slate-600 disabled:cursor-default" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="emergencyRelation" className="text-slate-600 text-xs font-medium">Relationship</Label>
+                    <Input id="emergencyRelation" value={form.emergencyRelation} onChange={handleChange} disabled={!isEditing} className="bg-white border-slate-200 text-sm h-9 disabled:text-slate-600 disabled:cursor-default" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Save / Discard */}
+              {isEditing && (
+                <div className="pt-2 flex items-center justify-end gap-3">
+                  <Button variant="outline" onClick={handleDiscard} className="border-slate-200 text-slate-600 hover:bg-slate-50">
+                    Discard
+                  </Button>
+                  <Button
+                    onClick={handleSave}
+                    disabled={isLoading}
+                    className="bg-teal-600 hover:bg-teal-700 px-8 text-white shadow-sm transition-all h-10"
+                  >
+                    {isLoading ? (
+                      <span className="flex items-center gap-2">
+                        <span className="h-3.5 w-3.5 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                        Saving...
+                      </span>
+                    ) : (
+                      <><Check className="mr-2 h-4 w-4" /> Save Changes</>
+                    )}
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
       </div>
     </div>
   )

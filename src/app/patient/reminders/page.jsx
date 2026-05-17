@@ -7,6 +7,7 @@ import { Input, Label } from "@/components/ui/Input"
 import { Modal } from "@/components/ui/Modal"
 import { Bell, Plus, Check, X, Clock, Settings2, Moon, Sun, Sunrise, Trash2 } from "lucide-react"
 import api from "@/lib/api"
+import { toast } from "react-hot-toast"
 
 export default function MedicineReminders() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
@@ -36,18 +37,21 @@ export default function MedicineReminders() {
 
   useEffect(() => {
     fetchReminders()
+    const interval = setInterval(fetchReminders, 30000) // Poll every 30s
+    return () => clearInterval(interval)
   }, [])
 
   const handleAddReminder = async (e) => {
     e.preventDefault()
     try {
       await api.post('/medicines', formData)
+      toast.success("Reminder added")
       fetchReminders()
       setIsAddModalOpen(false)
       setFormData({ medicineName: "", time: "", period: "Morning", instructions: "" })
     } catch (err) {
       console.error("Failed to add reminder:", err)
-      alert("Failed to add reminder")
+      toast.error("Failed to add reminder")
     }
   }
 
@@ -55,9 +59,11 @@ export default function MedicineReminders() {
     if (!confirm("Are you sure you want to delete this reminder?")) return;
     try {
       await api.delete(`/medicines/${id}`)
+      toast.success("Reminder deleted")
       fetchReminders()
     } catch (err) {
       console.error("Failed to delete reminder:", err)
+      toast.error("Failed to delete reminder")
     }
   }
 

@@ -27,6 +27,8 @@ export default function HealthReports() {
 
   useEffect(() => {
     fetchReports()
+    const interval = setInterval(fetchReports, 15000) // Poll every 15s
+    return () => clearInterval(interval)
   }, [])
 
   const getStatusConfig = (status) => {

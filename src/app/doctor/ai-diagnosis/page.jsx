@@ -30,7 +30,7 @@ export default function AIDiagnosisAssistant() {
               <div className="p-4 bg-slate-50 rounded-lg border border-slate-200 text-sm space-y-2">
                 <div className="flex justify-between">
                   <span className="text-slate-500">Age / Sex</span>
-                  <span className="font-medium text-slate-900">34 / Male</span>
+                  <span className="font-medium text-slate-900">34 / <span className="capitalize">male</span></span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-500">Vitals</span>
@@ -45,7 +45,7 @@ export default function AIDiagnosisAssistant() {
               <div className="space-y-2">
                 <label className="text-sm font-medium text-slate-900">Reported Symptoms</label>
                 <textarea 
-                  className="w-full h-32 p-3 rounded-md border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-teal-600 resize-none"
+                  className="w-full h-32 p-3 rounded-md border border-slate-200 bg-white text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-600 resize-none"
                   defaultValue="Patient complains of chest tightness that started 2 days ago. Pain has somewhat subsided. No shortness of breath currently reported. Pain is localized and does not radiate."
                 ></textarea>
               </div>
@@ -141,7 +141,7 @@ export default function AIDiagnosisAssistant() {
             </CardHeader>
             <CardContent>
               <textarea 
-                className="w-full h-32 p-4 rounded-md border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600 resize-none text-slate-700"
+                className="w-full h-32 p-4 rounded-md border border-slate-200 bg-slate-50 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-600 resize-none text-slate-900"
                 defaultValue="- Prescribe NSAIDs (e.g., Ibuprofen 400mg) for inflammation and pain relief.
 - Advise patient to rest and avoid strenuous chest movements.
 - Apply a warm compress to the affected area.

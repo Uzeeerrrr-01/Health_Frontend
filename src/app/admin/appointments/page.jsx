@@ -130,7 +130,7 @@ export default function AdminAppointments() {
             <div className="flex items-center gap-2 w-full sm:w-auto">
               <Filter className="w-4 h-4 text-slate-500" />
               <select 
-                className="flex h-10 w-full sm:w-40 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600"
+                className="flex h-10 w-full sm:w-40 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600"
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
               >
@@ -218,7 +218,7 @@ export default function AdminAppointments() {
               <Label htmlFor="status">Status</Label>
               <select 
                 id="status"
-                className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600"
+                className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600"
                 value={formData.status}
                 onChange={e => setFormData({...formData, status: e.target.value})}
               >

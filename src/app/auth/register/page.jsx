@@ -7,18 +7,21 @@ import { Button } from "@/components/ui/Button"
 import { Input, Label } from "@/components/ui/Input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/Card"
 import { Badge } from "@/components/ui/Badge"
-import { Activity, Upload, CheckCircle2, Clock, XCircle, AlertCircle, Image as ImageIcon, FileText } from "lucide-react"
+import { Activity, Upload, CheckCircle2, Clock, XCircle, AlertCircle, Image as ImageIcon, FileText, Eye, EyeOff } from "lucide-react"
 import api from "@/lib/api"
+import { useAuth } from "@/context/AuthContext"
 
 function RegisterContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const role = searchParams.get("role") || "patient"
   
+  const { token, authLoaded } = useAuth()
   const [step, setStep] = useState(1)
   const [isSubmitted, setIsSubmitted] = useState(false)
-  const [verificationStatus, setVerificationStatus] = useState("Pending")
+  const [verificationStatus, setVerificationStatus] = useState(searchParams.get("status") || "Pending")
   const [error, setError] = useState("")
+  const [showPassword, setShowPassword] = useState(false)
 
   const [formData, setFormData] = useState({
     firstName: "", lastName: "", email: "", password: "", phone: "",
@@ -32,6 +35,34 @@ function RegisterContent() {
 
   const isPatient = role === "patient"
   const isDoctor = role === "doctor"
+  const currentStatus = searchParams.get("status")
+  const isReverifying = isDoctor && !!currentStatus
+
+  // If already pending/rejected and not in the "success" state yet, show success state initially for pending
+  useEffect(() => {
+    if (isDoctor && (currentStatus === "pending" || currentStatus === "Pending") && !isSubmitted) {
+      setIsSubmitted(true)
+    }
+  }, [isDoctor, currentStatus, isSubmitted])
+
+  // Pre-fill email and name if available in sessionStorage (since they just logged in)
+  useEffect(() => {
+    if (isReverifying && authLoaded) {
+      const storedUser = sessionStorage.getItem('user')
+      if (storedUser) {
+        try {
+          const parsed = JSON.parse(storedUser)
+          const u = parsed.user || parsed
+          setFormData(prev => ({
+            ...prev,
+            firstName: u.fullName?.split(' ')[0] || "",
+            lastName: u.fullName?.split(' ').slice(1).join(' ') || "",
+            email: u.email || ""
+          }))
+        } catch (e) {}
+      }
+    }
+  }, [isReverifying, authLoaded])
 
   // Fix React warning: Move navigation side-effect to useEffect
   useEffect(() => {
@@ -59,8 +90,11 @@ function RegisterContent() {
         const payload = new FormData()
         payload.append('fullName', fullName)
         payload.append('email', formData.email)
-        payload.append('password', formData.password)
-        payload.append('phone', formData.phone) // Added phone
+        // Only send password if NOT reverifying
+        if (!isReverifying) {
+          payload.append('password', formData.password)
+        }
+        payload.append('phone', formData.phone)
         payload.append('specialization', formData.specialization)
         payload.append('yearsOfExperience', formData.experience)
         payload.append('licenseNumber', formData.license)
@@ -70,21 +104,26 @@ function RegisterContent() {
         if (files.governmentId) payload.append('governmentId', files.governmentId)
         if (files.degreeCertificate) payload.append('degreeCertificate', files.degreeCertificate)
         if (files.medicalLicenseProof) payload.append('medicalLicenseProof', files.medicalLicenseProof)
-        if (files.profilePhoto) payload.append('profilePhoto', files.profilePhoto) // Added profilePhoto
+        if (files.profilePhoto) payload.append('profilePhoto', files.profilePhoto)
         
-        const res = await api.post('/auth/doctor/register', payload, {
-          headers: { 'Content-Type': 'multipart/form-data' }
-        })
+        let res;
+        if (isReverifying) {
+          // Call reverify endpoint
+          res = await api.put('/auth/doctor/reverify', payload, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+          })
+        } else {
+          // Call register endpoint
+          res = await api.post('/auth/doctor/register', payload, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+          })
+        }
         
-        console.log('Doctor Registration Response:', res.data)
+        console.log('Doctor Request Response:', res.data)
         
         if (res.data.success) {
-          console.log('Doctor registered successfully, verification status:', res.data.verificationStatus)
           setIsSubmitted(true)
-          setVerificationStatus(res.data.verificationStatus || "Pending")
-          
-          // DO NOT log in doctor automatically - they need admin approval
-          // DO NOT store token or redirect to dashboard
+          setVerificationStatus(res.data.verificationStatus || "pending")
         }
       } else {
         const payload = {
@@ -92,7 +131,7 @@ function RegisterContent() {
           email: formData.email,
           password: formData.password,
           age: formData.age,
-          sex: formData.sex,
+          sex: (formData.sex || "").toLowerCase(),
           bloodGroup: formData.bloodGroup,
           allergies: formData.allergies,
           currentMedications: formData.medications,
@@ -107,11 +146,11 @@ function RegisterContent() {
         
         if (res.data.success) {
           console.log('Patient registered, role:', res.data.role)
-          localStorage.setItem('token', res.data.token)
-          localStorage.setItem('role', res.data.role)
-          localStorage.setItem('user', JSON.stringify(res.data))
+          sessionStorage.setItem('token', res.data.token)
+          sessionStorage.setItem('role', res.data.role)
+          sessionStorage.setItem('user', JSON.stringify(res.data))
           
-          console.log('Stored role in localStorage:', localStorage.getItem('role'))
+          console.log('Stored role in sessionStorage:', sessionStorage.getItem('role'))
           console.log('Redirecting to:', `/${res.data.role}/dashboard`)
           
           router.push(`/${res.data.role}/dashboard`)
@@ -180,11 +219,13 @@ function RegisterContent() {
               <div className="w-full flex flex-col gap-3">
                 {(verificationStatus === "rejected" || verificationStatus === "Rejected") ? (
                   <Button onClick={() => setIsSubmitted(false)} className="w-full">Update Details</Button>
+                ) : (verificationStatus === "approved" || verificationStatus === "Approved") ? (
+                  <Button onClick={() => router.push("/doctor/dashboard")} className="w-full bg-teal-600 hover:bg-teal-700">Go to Dashboard</Button>
                 ) : (
-                  <Button onClick={() => router.push("/")} variant="outline" className="w-full">Return to Home</Button>
-                )}
-                {(verificationStatus === "approved" || verificationStatus === "Approved") && (
-                  <Button onClick={() => router.push("/doctor/dashboard")} className="w-full">Go to Dashboard</Button>
+                  <div className="space-y-4 w-full">
+                    <Button onClick={() => router.push("/")} variant="outline" className="w-full">Return to Home</Button>
+                    <p className="text-[10px] text-slate-400">Status is updated automatically every 10 seconds</p>
+                  </div>
                 )}
               </div>
             </CardContent>
@@ -193,6 +234,33 @@ function RegisterContent() {
       </div>
     )
   }
+
+  // Effect to poll for verification status changes while on success screen
+  useEffect(() => {
+    let interval;
+    if (isSubmitted && isDoctor && (verificationStatus === "pending" || verificationStatus === "Pending")) {
+      interval = setInterval(async () => {
+        try {
+          const res = await api.get('/auth/me')
+          if (res.data.success) {
+            const status = res.data.verificationStatus || res.data.data?.verificationStatus
+            if (status && status !== verificationStatus) {
+              setVerificationStatus(status)
+              // Update session storage too
+              const stored = sessionStorage.getItem('user')
+              if (stored) {
+                const parsed = JSON.parse(stored)
+                if (parsed.user) parsed.user.verificationStatus = status
+                else parsed.verificationStatus = status
+                sessionStorage.setItem('user', JSON.stringify(parsed))
+              }
+            }
+          }
+        } catch (e) {}
+      }, 10000) // Poll every 10s
+    }
+    return () => clearInterval(interval)
+  }, [isSubmitted, isDoctor, verificationStatus])
 
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 py-12">
@@ -237,10 +305,28 @@ function RegisterContent() {
                     <Label htmlFor="email">Email</Label>
                     <Input id="email" type="email" value={formData.email} onChange={handleChange} required />
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="password">Password</Label>
-                    <Input id="password" type="password" value={formData.password} onChange={handleChange} required />
-                  </div>
+                  {!isReverifying && (
+                    <div className="space-y-2">
+                      <Label htmlFor="password">Password</Label>
+                      <div className="relative">
+                        <Input 
+                          id="password" 
+                          type={showPassword ? "text" : "password"} 
+                          value={formData.password} 
+                          onChange={handleChange} 
+                          required 
+                          className="pr-10"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-teal-600 transition-colors"
+                        >
+                          {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                        </button>
+                      </div>
+                    </div>
+                  )}
                   <Button type="button" className="w-full" onClick={() => setStep(2)}>Continue</Button>
                 </div>
               )}
@@ -251,11 +337,11 @@ function RegisterContent() {
                   <div className="grid grid-cols-3 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="age">Age</Label>
-                      <Input id="age" type="number" value={formData.age} onChange={handleChange} required />
+                      <Input id="age" type="number" min="0" max="120" value={formData.age} onChange={handleChange} required />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="sex">Sex</Label>
-                      <select id="sex" value={formData.sex} onChange={handleChange} className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600">
+                      <select id="sex" value={formData.sex} onChange={handleChange} className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600">
                         <option value="">Select</option>
                         <option value="male">Male</option>
                         <option value="female">Female</option>
@@ -264,7 +350,7 @@ function RegisterContent() {
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="bloodGroup">Blood Group</Label>
-                      <select id="bloodGroup" value={formData.bloodGroup} onChange={handleChange} className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600">
+                      <select id="bloodGroup" value={formData.bloodGroup} onChange={handleChange} className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600">
                         <option value="">Select</option>
                         <option value="A+">A+</option>
                         <option value="A-">A-</option>
@@ -323,7 +409,7 @@ function RegisterContent() {
                     <div className="grid sm:grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label htmlFor="specialization">Specialization <span className="text-red-500">*</span></Label>
-                        <select id="specialization" value={formData.specialization} onChange={handleChange} required className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600">
+                        <select id="specialization" value={formData.specialization} onChange={handleChange} required className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600">
                           <option value="">Select Speciality</option>
                           <option value="cardiology">Cardiology</option>
                           <option value="dermatology">Dermatology</option>

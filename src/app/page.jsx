@@ -89,14 +89,44 @@ export default function LandingPage() {
         </section>
       </main>
 
-      <footer className="bg-white border-t border-slate-200 py-12">
-        <div className="container mx-auto px-4 sm:px-8 text-center text-slate-500">
-          <p>&copy; {new Date().getFullYear()} MediAI Ecosystem. All rights reserved.</p>
+      <footer className="bg-slate-900 text-slate-400 border-t border-slate-800">
+        <div className="container mx-auto px-4 sm:px-8 py-6">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+            
+            {/* Brand */}
+            <div className="flex items-center gap-2">
+              <div className="flex h-7 w-7 items-center justify-center rounded-md bg-teal-600">
+                <Activity className="h-4 w-4 text-white" />
+              </div>
+              <span className="text-base font-bold text-white">MediAI</span>
+            </div>
+
+            {/* Links */}
+            <div className="flex items-center gap-6 text-sm flex-wrap justify-center">
+              <Link href="#features" className="hover:text-teal-400 transition-colors">Features</Link>
+              <Link href="/testimonials" className="hover:text-teal-400 transition-colors">Testimonials</Link>
+              <Link href="/auth/login" className="hover:text-teal-400 transition-colors">Patient Portal</Link>
+              <Link href="/auth/login" className="hover:text-teal-400 transition-colors">Doctor Portal</Link>
+              <span className="hover:text-teal-400 transition-colors cursor-pointer">Privacy Policy</span>
+              <span className="hover:text-teal-400 transition-colors cursor-pointer">Terms</span>
+            </div>
+
+            {/* Right side */}
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1.5">
+                <span className="inline-flex h-2 w-2 rounded-full bg-teal-500 animate-pulse"></span>
+                <span className="text-xs text-slate-500">All systems operational</span>
+              </div>
+              <span className="text-slate-700">|</span>
+              <p className="text-xs text-slate-500">&copy; {new Date().getFullYear()} MediAI</p>
+            </div>
+          </div>
         </div>
       </footer>
     </div>
   )
 }
+
 
 function Badge({ children, className }) {
   return (

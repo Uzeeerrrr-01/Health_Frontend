@@ -8,6 +8,7 @@ import { Input, Label } from "@/components/ui/Input"
 import { Modal } from "@/components/ui/Modal"
 import { Calendar, Clock, Video, MapPin, CheckCircle2, AlertCircle, XCircle } from "lucide-react"
 import api from "@/lib/api"
+import { toast } from "react-hot-toast"
 
 export default function DoctorAppointments() {
   const [appointments, setAppointments] = useState([])
@@ -18,8 +19,8 @@ export default function DoctorAppointments() {
   const [rescheduleData, setRescheduleData] = useState({ date: "", time: "" })
 
   const fetchAppointments = async () => {
-    const token = localStorage.getItem('token');
-    const role = localStorage.getItem('role');
+    const token = sessionStorage.getItem('token');
+    const role = sessionStorage.getItem('role');
 
     if (!token) {
       setError("Please login to view appointments");
@@ -48,15 +49,17 @@ export default function DoctorAppointments() {
 
   useEffect(() => {
     fetchAppointments()
+    const interval = setInterval(fetchAppointments, 10000) // Poll every 10s
+    return () => clearInterval(interval)
   }, [])
 
   const handleStatusChange = async (id, status) => {
     try {
       await api.put(`/appointments/${id}`, { status })
       fetchAppointments()
-      alert(`Appointment ${status} successfully.`)
+      toast.success(`Appointment ${status} successfully.`)
     } catch (err) {
-      alert("Failed to update status")
+      toast.error("Failed to update status")
     }
   }
 
@@ -65,10 +68,10 @@ export default function DoctorAppointments() {
     try {
       await api.put(`/appointments/${id}`, { status: 'cancelled' })
       fetchAppointments()
-      alert("Appointment cancelled successfully.")
+      toast.success("Appointment cancelled successfully.")
     } catch (err) {
       console.error("Failed to cancel appointment", err)
-      alert("Failed to cancel appointment")
+      toast.error("Failed to cancel appointment")
     }
   }
 
@@ -87,8 +90,9 @@ export default function DoctorAppointments() {
       await api.put(`/appointments/${selectedAppointment._id}`, rescheduleData)
       setIsRescheduleModalOpen(false)
       fetchAppointments()
+      toast.success("Appointment rescheduled and patient notified")
     } catch (err) {
-      alert("Failed to reschedule")
+      toast.error("Failed to reschedule")
     }
   }
 

@@ -1,13 +1,15 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Card, CardContent } from "@/components/ui/Card"
 import { Button } from "@/components/ui/Button"
 import { Badge } from "@/components/ui/Badge"
 import { Input, Label } from "@/components/ui/Input"
 import { Modal } from "@/components/ui/Modal"
-import { Calendar as CalendarIcon, Clock, Video, MapPin, Search, Plus, Filter, XCircle } from "lucide-react"
+import { Calendar as CalendarIcon, Clock, Video, MapPin, Search, Plus, Filter, XCircle, MessageCircle, BellRing, X } from "lucide-react"
 import api from "@/lib/api"
+import { toast } from "react-hot-toast"
+import Link from "next/link"
 
 export default function AppointmentsPage() {
   const [activeTab, setActiveTab] = useState("upcoming")
@@ -17,6 +19,8 @@ export default function AppointmentsPage() {
   const [error, setError] = useState("")
   const [isBookingModalOpen, setIsBookingModalOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
+  const [chatNowAlert, setChatNowAlert] = useState(null) // { doctorName, doctorId, aptId }
+  const alertedAptIds = useRef(new Set())
   
   const [formData, setFormData] = useState({
     doctor: "",
@@ -27,8 +31,8 @@ export default function AppointmentsPage() {
   })
 
   const fetchAppointments = async () => {
-    const token = localStorage.getItem('token');
-    const role = localStorage.getItem('role');
+    const token = sessionStorage.getItem('token');
+    const role = sessionStorage.getItem('role');
     
     if (!token) {
       setError("Please login to view appointments");
@@ -69,7 +73,47 @@ export default function AppointmentsPage() {
   useEffect(() => {
     fetchAppointments()
     fetchDoctors()
+    const interval = setInterval(fetchAppointments, 10000) // Poll every 10s
+    return () => clearInterval(interval)
   }, [])
+
+  // ── Appointment-time popup checker ─────────────────────────────
+  useEffect(() => {
+    const checkAppointmentTime = () => {
+      const now = new Date()
+      appointments.forEach(apt => {
+        if (alertedAptIds.current.has(apt._id)) return
+        if (apt.status !== 'confirmed' && apt.status !== 'scheduled' && apt.status !== 'pending') return
+
+        // Parse appointment date + time string (e.g. "10:30 AM")
+        const aptDate = new Date(apt.date)
+        if (apt.time) {
+          const [timePart, modifier] = apt.time.split(' ')
+          let [hours, minutes] = timePart.split(':').map(Number)
+          if (modifier === 'PM' && hours !== 12) hours += 12
+          if (modifier === 'AM' && hours === 12) hours = 0
+          aptDate.setHours(hours, minutes, 0, 0)
+        }
+
+        // Trigger popup within a ±5 min window of appointment time
+        const diffMs = aptDate - now
+        if (diffMs >= -5 * 60 * 1000 && diffMs <= 5 * 60 * 1000) {
+          alertedAptIds.current.add(apt._id)
+          setChatNowAlert({
+            doctorName: apt.doctor?.fullName || 'your doctor',
+            doctorId: apt.doctor?._id,
+            aptId: apt._id,
+            time: apt.time,
+            consultationType: apt.consultationType,
+          })
+        }
+      })
+    }
+
+    checkAppointmentTime() // run immediately
+    const timer = setInterval(checkAppointmentTime, 60 * 1000) // check every minute
+    return () => clearInterval(timer)
+  }, [appointments])
 
   const handleBookAppointment = async (e) => {
     e.preventDefault()
@@ -77,20 +121,20 @@ export default function AppointmentsPage() {
       // Map consultationType to backend enum
       const payload = {
         ...formData,
-        consultationType: formData.consultationType === "video" ? "online" : "offline",
+        consultationType: formData.consultationType === "video" ? "online" : formData.consultationType === "chat" ? "chat" : "offline",
         reason: formData.reason || "General Consultation" // Ensure reason is not empty
       }
       
       await api.post('/appointments', payload)
+      toast.success("Appointment booked successfully!")
       fetchAppointments()
       setIsBookingModalOpen(false)
       setFormData({
         doctor: "", date: "", time: "", consultationType: "video", reason: ""
       })
-      alert("Appointment booked successfully!")
     } catch (err) {
       console.error("Failed to book appointment", err)
-      alert(err.message || "Failed to book appointment")
+      toast.error(err.response?.data?.message || err.message || "Failed to book appointment")
     }
   }
 
@@ -98,10 +142,11 @@ export default function AppointmentsPage() {
     if (!confirm("Are you sure you want to cancel this appointment?")) return;
     try {
       await api.put(`/appointments/${id}`, { status: 'cancelled' })
+      toast.success("Appointment cancelled")
       fetchAppointments()
     } catch (err) {
       console.error("Failed to cancel appointment", err)
-      alert("Failed to cancel appointment")
+      toast.error(err.response?.data?.message || "Failed to cancel appointment")
     }
   }
 
@@ -119,6 +164,64 @@ export default function AppointmentsPage() {
 
   return (
     <div className="space-y-6">
+
+      {/* ── Appointment Time Popup ── */}
+      {chatNowAlert && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+          <div className="relative bg-white rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden animate-in zoom-in-95 fade-in">
+            {/* Teal top bar */}
+            <div className="h-2 bg-gradient-to-r from-teal-400 to-teal-600" />
+
+            {/* Close */}
+            <button
+              onClick={() => setChatNowAlert(null)}
+              className="absolute top-4 right-4 p-1 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+            >
+              <X className="h-4 w-4" />
+            </button>
+
+            <div className="p-6">
+              {/* Icon */}
+              <div className="mx-auto mb-4 h-14 w-14 flex items-center justify-center rounded-full bg-teal-50 ring-4 ring-teal-100">
+                <BellRing className="h-7 w-7 text-teal-600 animate-bounce" />
+              </div>
+
+              <h2 className="text-xl font-bold text-slate-900 text-center">It's appointment time!</h2>
+              <p className="text-slate-500 text-sm text-center mt-2">
+                Your appointment with <span className="font-semibold text-slate-700">Dr. {chatNowAlert.doctorName}</span> is happening now.
+              </p>
+              <p className="text-xs text-slate-400 text-center mt-1">⏰ {chatNowAlert.time}</p>
+
+              <div className="mt-6 flex flex-col gap-3">
+                <Link
+                  href={`/patient/chat?doctorId=${chatNowAlert.doctorId}`}
+                  onClick={() => setChatNowAlert(null)}
+                >
+                  <Button className="w-full bg-teal-600 hover:bg-teal-700 text-white gap-2 h-11 text-base shadow-sm">
+                    <MessageCircle className="h-5 w-5" /> Chat Now!
+                  </Button>
+                </Link>
+
+                {chatNowAlert.consultationType === 'online' && (
+                  <Link href="/patient/video-call" onClick={() => setChatNowAlert(null)}>
+                    <Button variant="outline" className="w-full gap-2 h-10 border-indigo-200 text-indigo-700 hover:bg-indigo-50">
+                      <Video className="h-4 w-4" /> Join Video Call
+                    </Button>
+                  </Link>
+                )}
+
+                <button
+                  onClick={() => setChatNowAlert(null)}
+                  className="text-xs text-slate-400 hover:text-slate-600 text-center mt-1 underline underline-offset-2"
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">Appointments</h1>
@@ -164,7 +267,7 @@ export default function AppointmentsPage() {
               placeholder="Search doctor..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="h-10 w-full sm:w-64 rounded-md border border-slate-200 bg-white pl-9 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600 focus:border-transparent"
+              className="h-10 w-full sm:w-64 rounded-md border border-slate-200 bg-white pl-9 pr-4 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:border-transparent"
             />
           </div>
         </div>
@@ -222,17 +325,26 @@ export default function AppointmentsPage() {
                   </div>
 
                   <div className="flex flex-col sm:items-end gap-3 sm:pl-6 sm:border-l border-slate-100">
-                    {(apt.status === "confirmed" || apt.status === "pending") ? (
-                      <>
+                    {(apt.status === "confirmed" || apt.status === "pending" || apt.status === "scheduled") ? (
+                      <div className="flex flex-col gap-2">
+                        <Button 
+                          className="w-full sm:w-auto bg-teal-600 hover:bg-teal-700"
+                          onClick={() => window.location.href = `/patient/chat?doctorId=${apt.doctor?._id}`}
+                        >
+                          Chat
+                        </Button>
                         {apt.consultationType === "online" && (
-                          <Button className="w-full sm:w-auto">Join Call</Button>
+                          <Button 
+                            className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700"
+                            onClick={() => window.location.href = `/patient/video-call`}
+                          >
+                            <Video className="h-4 w-4 mr-2" /> Video Call
+                          </Button>
                         )}
                         <Button variant="outline" onClick={() => handleCancelAppointment(apt._id)} className="w-full sm:w-auto text-red-600 hover:text-red-700 hover:bg-red-50">Cancel</Button>
-                      </>
+                      </div>
                     ) : (
-                      <>
-                        <Button className="w-full sm:w-auto bg-slate-900 text-white hover:bg-slate-800" onClick={() => setIsBookingModalOpen(true)}>Book Follow-up</Button>
-                      </>
+                      <Button className="w-full sm:w-auto bg-slate-900 text-white hover:bg-slate-800" onClick={() => setIsBookingModalOpen(true)}>Book Follow-up</Button>
                     )}
                   </div>
                 </div>
@@ -261,7 +373,7 @@ export default function AppointmentsPage() {
               id="doctor"
               value={formData.doctor}
               onChange={(e) => setFormData({...formData, doctor: e.target.value})}
-              className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600"
+              className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600"
               required
             >
               <option value="" disabled>Select a doctor...</option>
@@ -300,9 +412,10 @@ export default function AppointmentsPage() {
               id="consultationType"
               value={formData.consultationType}
               onChange={(e) => setFormData({...formData, consultationType: e.target.value})}
-              className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600"
+              className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600"
             >
               <option value="video">Video Consultation</option>
+              <option value="chat">Chat Consultation</option>
               <option value="in-person">In-person Clinic Visit</option>
             </select>
           </div>

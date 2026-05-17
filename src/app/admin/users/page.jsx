@@ -7,8 +7,9 @@ import { Input, Label } from "@/components/ui/Input"
 import { Badge } from "@/components/ui/Badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/Table"
 import { Modal } from "@/components/ui/Modal"
-import { Search, Plus, Edit2, Trash2, Eye, Filter, Users, UserCheck, UserX, UserPlus } from "lucide-react"
+import { Search, Plus, Edit2, Trash2, Eye, EyeOff, Filter, Users, UserCheck, UserX, UserPlus } from "lucide-react"
 import api from "@/lib/api"
+import { toast } from "react-hot-toast"
 
 export default function AdminUsers() {
   const [users, setUsers] = useState([])
@@ -22,10 +23,11 @@ export default function AdminUsers() {
   const [selectedUser, setSelectedUser] = useState(null)
   
   const [formData, setFormData] = useState({
-    fullName: "", email: "", phone: "", age: "", sex: "Male", bloodGroup: "", allergies: "", currentMedications: "", previousDiseaseHistory: "", familyDiseaseHistory: "", emergencyContact: "", accountStatus: "active"
+    fullName: "", email: "", password: "", confirmPassword: "", mustChangePassword: false, phone: "", age: "", sex: "male", bloodGroup: "", allergies: "", currentMedications: "", previousDiseaseHistory: "", familyDiseaseHistory: "", emergencyContact: "", accountStatus: "active"
   })
 
   const [isLoading, setIsLoading] = useState(true)
+  const [showPassword, setShowPassword] = useState(false)
 
   const fetchUsers = async () => {
     try {
@@ -36,6 +38,7 @@ export default function AdminUsers() {
       }
     } catch (error) {
       console.error("Failed to fetch users:", error)
+      toast.error(typeof error === 'string' ? error : "Failed to load user list")
     } finally {
       setIsLoading(false)
     }
@@ -43,6 +46,8 @@ export default function AdminUsers() {
 
   useEffect(() => {
     fetchUsers()
+    const interval = setInterval(fetchUsers, 10000) // Poll every 10s
+    return () => clearInterval(interval)
   }, [])
 
   const filteredUsers = useMemo(() => {
@@ -65,24 +70,43 @@ export default function AdminUsers() {
   }
 
   const handleOpenAdd = () => {
-    setFormData({ fullName: "", email: "", phone: "", age: "", sex: "Male", bloodGroup: "", allergies: "", currentMedications: "", previousDiseaseHistory: "", familyDiseaseHistory: "", emergencyContact: "", accountStatus: "active" })
+    setFormData({ 
+      fullName: "", email: "", password: "password123", confirmPassword: "password123", mustChangePassword: true, phone: "", age: "", sex: "male", 
+      bloodGroup: "", allergies: "", currentMedications: "", 
+      previousDiseaseHistory: "", familyDiseaseHistory: "", 
+      emergencyContact: "", accountStatus: "active" 
+    })
     setSelectedUser(null)
     setIsFormModalOpen(true)
   }
 
   const handleOpenEdit = (user) => {
+    // Convert arrays to comma-separated strings for the form
+    const formatArray = (arr) => Array.isArray(arr) ? arr.join(', ') : (arr || "");
+    
+    // Convert emergencyContact object to string for the form
+    const formatEC = (ec) => {
+      if (typeof ec === 'object' && ec !== null) {
+        return `${ec.name || ""}${ec.phone ? ", " + ec.phone : ""}${ec.relation ? ", " + ec.relation : ""}`;
+      }
+      return ec || "";
+    };
+
     setFormData({
       fullName: user.fullName || "",
       email: user.email || "",
+      password: "",
+      confirmPassword: "",
+      mustChangePassword: user.mustChangePassword || false,
       phone: user.phone || "",
       age: user.age || "",
-      sex: user.sex || "Male",
+      sex: user.sex || "male",
       bloodGroup: user.bloodGroup || "",
-      allergies: user.allergies || "",
-      currentMedications: user.currentMedications || "",
-      previousDiseaseHistory: user.previousDiseaseHistory || "",
-      familyDiseaseHistory: user.familyDiseaseHistory || "",
-      emergencyContact: user.emergencyContact || "",
+      allergies: formatArray(user.allergies),
+      currentMedications: formatArray(user.currentMedications),
+      previousDiseaseHistory: formatArray(user.previousDiseaseHistory),
+      familyDiseaseHistory: formatArray(user.familyDiseaseHistory),
+      emergencyContact: formatEC(user.emergencyContact),
       accountStatus: user.accountStatus || "active"
     })
     setSelectedUser(user)
@@ -101,39 +125,84 @@ export default function AdminUsers() {
 
   const handleSaveUser = async (e) => {
     e.preventDefault()
+    
+    if (formData.password !== formData.confirmPassword) {
+      return toast.error("Passwords do not match")
+    }
+
+    if (!selectedUser && formData.password.length < 6) {
+      return toast.error("Password must be at least 6 characters")
+    }
+
     try {
-      if (selectedUser) {
-        await api.put(`/admin/users/${selectedUser._id}`, formData)
-      } else {
-        await api.post('/admin/users', formData)
+      // Process strings back into arrays/objects
+      const processArray = (str) => typeof str === 'string' ? str.split(',').map(s => s.trim()).filter(s => s !== "") : str;
+      
+      const processedData = {
+        ...formData,
+        allergies: processArray(formData.allergies),
+        currentMedications: processArray(formData.currentMedications),
+        previousDiseaseHistory: processArray(formData.previousDiseaseHistory),
+        familyDiseaseHistory: processArray(formData.familyDiseaseHistory),
+        sex: (formData.sex || "male").toLowerCase(),
+      };
+
+      // Process emergency contact (expecting "Name, Phone, Relation")
+      if (typeof formData.emergencyContact === 'string' && formData.emergencyContact.includes(',')) {
+        const parts = formData.emergencyContact.split(',').map(p => p.trim());
+        processedData.emergencyContact = {
+          name: parts[0] || "",
+          phone: parts[1] || "",
+          relation: parts[2] || ""
+        };
+      } else if (typeof formData.emergencyContact === 'string') {
+        processedData.emergencyContact = { name: formData.emergencyContact, phone: "", relation: "" };
       }
-      fetchUsers()
+
+      // If editing, remove password if empty
+      if (selectedUser && !processedData.password) {
+        delete processedData.password;
+      }
+
+      if (selectedUser) {
+        await api.put(`/admin/users/${selectedUser._id}`, processedData)
+      } else {
+        await api.post('/admin/users', processedData)
+      }
+      
+      toast.success(selectedUser ? "User updated" : "User created")
+      await fetchUsers()
       setIsFormModalOpen(false)
     } catch (err) {
       console.error("Failed to save user", err)
-      alert("Failed to save user. Please try again.")
+      const errorMsg = err.response?.data?.message || err.message || "Failed to save user.";
+      toast.error(errorMsg)
     }
   }
 
   const handleDeleteUser = async () => {
     try {
       await api.delete(`/admin/users/${selectedUser._id}`)
-      fetchUsers()
+      toast.success("User deleted")
+      await fetchUsers()
       setIsDeleteModalOpen(false)
     } catch (err) {
       console.error("Failed to delete user", err)
-      alert("Failed to delete user.")
+      toast.error("Failed to delete user.")
     }
   }
 
   const handleToggleStatus = async (user) => {
     try {
       await api.put(`/admin/users/${user._id}/status`)
-      fetchUsers()
+      toast.success("Status updated")
+      await fetchUsers()
     } catch (err) {
       console.error("Failed to toggle status", err)
+      toast.error("Failed to update status")
     }
   }
+
 
   const getStatusBadgeVariant = (user) => {
     if (user.accountStatus === 'suspended') return "destructive"
@@ -316,6 +385,85 @@ export default function AdminUsers() {
               <Label htmlFor="email" className="text-slate-700">Email</Label>
               <Input id="email" type="email" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} required className="text-slate-900" />
             </div>
+            {!selectedUser && (
+              <div className="space-y-2">
+                <Label htmlFor="password" className="text-slate-700">Password <span className="text-red-500">*</span></Label>
+                <div className="relative">
+                  <Input 
+                    id="password" 
+                    type={showPassword ? "text" : "password"} 
+                    value={formData.password} 
+                    onChange={e => setFormData({...formData, password: e.target.value})} 
+                    required 
+                    className="text-slate-900 pr-10" 
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-teal-600 transition-colors"
+                  >
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
+              </div>
+            )}
+            {!selectedUser && (
+              <div className="space-y-2">
+                <Label htmlFor="confirmPassword" className="text-slate-700">Confirm Password <span className="text-red-500">*</span></Label>
+                <Input 
+                  id="confirmPassword" 
+                  type={showPassword ? "text" : "password"} 
+                  value={formData.confirmPassword} 
+                  onChange={e => setFormData({...formData, confirmPassword: e.target.value})} 
+                  required 
+                  className="text-slate-900" 
+                />
+              </div>
+            )}
+            {selectedUser && (
+              <div className="space-y-2">
+                <Label htmlFor="password" className="text-slate-700">New Password (optional)</Label>
+                <div className="relative">
+                  <Input 
+                    id="password" 
+                    type={showPassword ? "text" : "password"} 
+                    value={formData.password} 
+                    onChange={e => setFormData({...formData, password: e.target.value})} 
+                    className="text-slate-900 pr-10" 
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-teal-600 transition-colors"
+                  >
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
+              </div>
+            )}
+            {selectedUser && formData.password && (
+              <div className="space-y-2">
+                <Label htmlFor="confirmPassword" className="text-slate-700">Confirm New Password</Label>
+                <Input 
+                  id="confirmPassword" 
+                  type={showPassword ? "text" : "password"} 
+                  value={formData.confirmPassword} 
+                  onChange={e => setFormData({...formData, confirmPassword: e.target.value})} 
+                  required 
+                  className="text-slate-900" 
+                />
+              </div>
+            )}
+            <div className="space-y-2 py-2 flex items-center gap-2">
+              <input 
+                type="checkbox" 
+                id="mustChangePassword" 
+                checked={formData.mustChangePassword}
+                onChange={e => setFormData({...formData, mustChangePassword: e.target.checked})}
+                className="rounded border-slate-300 text-teal-600"
+              />
+              <Label htmlFor="mustChangePassword" className="text-slate-700 cursor-pointer">Require password change on first login</Label>
+            </div>
             <div className="space-y-2">
               <Label htmlFor="phone" className="text-slate-700">Phone</Label>
               <Input id="phone" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} className="text-slate-900" />
@@ -332,9 +480,9 @@ export default function AdminUsers() {
                 value={formData.sex}
                 onChange={e => setFormData({...formData, sex: e.target.value})}
               >
-                <option value="Male">Male</option>
-                <option value="Female">Female</option>
-                <option value="Other">Other</option>
+                <option value="male">Male</option>
+                <option value="female">Female</option>
+                <option value="other">Other</option>
               </select>
             </div>
             <div className="space-y-2">
@@ -342,8 +490,8 @@ export default function AdminUsers() {
               <Input id="bloodGroup" value={formData.bloodGroup} onChange={e => setFormData({...formData, bloodGroup: e.target.value})} className="text-slate-900" />
             </div>
             <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="allergies" className="text-slate-700">Allergies</Label>
-              <Input id="allergies" value={formData.allergies} onChange={e => setFormData({...formData, allergies: e.target.value})} className="text-slate-900" />
+              <Label htmlFor="allergies" className="text-slate-700">Allergies (comma separated)</Label>
+              <Input id="allergies" placeholder="Peanuts, Dust, etc." value={formData.allergies} onChange={e => setFormData({...formData, allergies: e.target.value})} className="text-slate-900" />
             </div>
             <div className="space-y-2 sm:col-span-2">
               <Label htmlFor="currentMedications" className="text-slate-700">Current Medications</Label>
@@ -358,8 +506,8 @@ export default function AdminUsers() {
               <Input id="familyDiseaseHistory" value={formData.familyDiseaseHistory} onChange={e => setFormData({...formData, familyDiseaseHistory: e.target.value})} className="text-slate-900" />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="emergencyContact" className="text-slate-700">Emergency Contact</Label>
-              <Input id="emergencyContact" value={formData.emergencyContact} onChange={e => setFormData({...formData, emergencyContact: e.target.value})} className="text-slate-900" />
+              <Label htmlFor="emergencyContact" className="text-slate-700">Emergency Contact (Name, Phone, Relation)</Label>
+              <Input id="emergencyContact" placeholder="John Doe, 1234567890, Brother" value={formData.emergencyContact} onChange={e => setFormData({...formData, emergencyContact: e.target.value})} className="text-slate-900" />
             </div>
             <div className="space-y-2">
               <Label htmlFor="accountStatus" className="text-slate-700">Status</Label>
