@@ -42,7 +42,7 @@ api.interceptors.response.use(
           // Avoid redirecting if already on login or register to prevent loop
           const currentPath = window.location.pathname;
           if (!currentPath.includes('/auth/login') && !currentPath.includes('/auth/register')) {
-            window.location.href = '/auth/login';
+            // window.location.href = '/auth/login';
           }
         }
       }

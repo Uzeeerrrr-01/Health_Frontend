@@ -63,11 +63,12 @@ export default function SymptomChecker() {
         throw new Error("Invalid AI response")
       }
     } catch (error) {
-      console.error("AI check failed:", error)
-      setError("I'm having trouble connecting to the medical brain right now. Please try again or consult a doctor if it's urgent.")
+      console.error("AI error:", error.response?.data || error.message || error)
+      const errorMessage = error.response?.data?.message || error.message || "AI request failed"
+      setError(errorMessage)
       setMessages(prev => [...prev, {
         sender: "ai",
-        content: "I apologize, but I encountered an error while analyzing your symptoms. Please check your connection or try again later.",
+        content: `Error: ${errorMessage}. Please check your AI API key or connection.`,
       }])
     } finally {
       setIsTyping(false)
