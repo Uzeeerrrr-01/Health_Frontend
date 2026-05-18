@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef } from "react"
 import { useRouter, usePathname } from "next/navigation"
 import { Sidebar } from "@/components/layout/Sidebar"
 import { Topbar } from "@/components/layout/Topbar"
@@ -22,6 +22,8 @@ export default function DoctorLayout({ children }) {
   const [incomingRequest, setIncomingRequest] = useState(null)
   const [isRescheduling, setIsRescheduling] = useState(false)
   const [rescheduleTime, setRescheduleTime] = useState("")
+  // Track dismissed/rejected chat IDs so polling never re-shows them
+  const dismissedChatIds = useRef(new Set())
 
   useEffect(() => {
     if (authLoaded) {
@@ -68,6 +70,15 @@ export default function DoctorLayout({ children }) {
         }
       });
 
+      socket.on("cancelChatRequest", (data) => {
+        console.log(`[Socket] Doctor received cancelChatRequest event:`, data);
+        toast.error("Patient cancelled the consultation request");
+        setIncomingRequest(prev => {
+          if (prev && prev._id === data.chatId) return null;
+          return prev;
+        });
+      });
+
       socket.on("disconnect", () => {
         console.log("[Socket] Doctor disconnected");
       });
@@ -87,10 +98,22 @@ export default function DoctorLayout({ children }) {
       interval = setInterval(async () => {
         try {
           const res = await api.get('/chats/doctor/pending')
-          if (res.data.success && res.data.data.length > 0) {
-            // Only show if we don't already have one or if it's a different one
-            if (!incomingRequest || incomingRequest._id !== res.data.data[0]._id) {
-              setIncomingRequest(res.data.data[0])
+          if (res.data.success) {
+            if (res.data.data.length > 0) {
+              // Filter out any IDs the doctor has already dismissed/rejected
+              const newRequest = res.data.data.find(
+                (c) => !dismissedChatIds.current.has(c._id)
+              )
+              if (newRequest) {
+                if (!incomingRequest || incomingRequest._id !== newRequest._id) {
+                  setIncomingRequest(newRequest)
+                }
+              } else if (incomingRequest) {
+                setIncomingRequest(null)
+              }
+            } else if (incomingRequest) {
+              // The request was cancelled or accepted elsewhere
+              setIncomingRequest(null)
             }
           }
         } catch (err) {}
@@ -102,12 +125,40 @@ export default function DoctorLayout({ children }) {
   const handleAccept = async () => {
     try {
       await api.put(`/chats/${incomingRequest._id}/respond`, { status: 'active' })
+      
+      // Automatically update status to busy
+      try {
+        await api.patch('/auth/profile', { onlineStatus: 'busy' })
+        const stored = JSON.parse(sessionStorage.getItem("user") || "{}")
+        const base = stored.user || stored
+        const updated = { ...base, onlineStatus: 'busy' }
+        sessionStorage.setItem("user", JSON.stringify(updated))
+        window.dispatchEvent(new CustomEvent("profileUpdated"))
+      } catch (statusErr) {
+        console.error("Failed to update status to busy:", statusErr)
+      }
+
       toast.success("Consultation accepted!")
       const chatUrl = `/doctor/chat/${incomingRequest._id}`
+      dismissedChatIds.current.add(incomingRequest._id)
       setIncomingRequest(null)
       router.push(chatUrl)
     } catch (err) {
       toast.error("Failed to accept consultation")
+    }
+  }
+
+  const handleBusy = async () => {
+    try {
+      // Mark as ended in DB so it never appears in pending again
+      await api.put(`/chats/${incomingRequest._id}/respond`, { status: 'rescheduled', scheduledTime: 'Doctor is busy' })
+    } catch (err) {
+      // Even if backend fails, still dismiss locally
+    } finally {
+      dismissedChatIds.current.add(incomingRequest._id)
+      setIncomingRequest(null)
+      setIsRescheduling(false)
+      toast("Request dismissed")
     }
   }
 
@@ -119,6 +170,7 @@ export default function DoctorLayout({ children }) {
         scheduledTime: new Date(rescheduleTime).toLocaleString() 
       })
       toast.success("Rescheduled successfully")
+      dismissedChatIds.current.add(incomingRequest._id)
       setIncomingRequest(null)
       setIsRescheduling(false)
     } catch (err) {
@@ -148,10 +200,15 @@ export default function DoctorLayout({ children }) {
       </div>
 
       {/* Incoming Consultation Modal */}
-      {incomingRequest && (
+      {incomingRequest && !pathname.includes(incomingRequest._id) && (
         <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="bg-teal-600 p-6 text-white text-center">
+            <div className="bg-teal-600 p-6 text-white text-center relative">
+              <button
+                onClick={handleBusy}
+                className="absolute top-3 right-3 h-7 w-7 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center text-white font-bold text-sm transition-all"
+                title="Dismiss"
+              >✕</button>
               <div className="h-16 w-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4 border border-white/30">
                 <MessageSquare className="h-8 w-8 text-white" />
               </div>
@@ -188,7 +245,7 @@ export default function DoctorLayout({ children }) {
                 </div>
               ) : (
                 <div className="grid grid-cols-2 gap-3">
-                  <Button variant="outline" className="h-12 border-slate-200 text-slate-600 font-bold hover:bg-slate-50" onClick={() => setIsRescheduling(true)}>
+                  <Button variant="outline" className="h-12 border-slate-200 text-slate-600 font-bold hover:bg-slate-50" onClick={handleBusy}>
                     <Clock className="h-4 w-4 mr-2" /> Busy
                   </Button>
                   <Button className="h-12 bg-teal-600 hover:bg-teal-700 font-bold shadow-lg shadow-teal-100" onClick={handleAccept}>

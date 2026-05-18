@@ -6,19 +6,28 @@ import { ChatWindow } from "@/components/shared/ChatWindow"
 import { Card, CardContent } from "@/components/ui/Card"
 import { Badge } from "@/components/ui/Badge"
 import { Button } from "@/components/ui/Button"
-import { Video, Mic, Activity, FileText, FileClock, History, MessageSquare, Clock, Calendar, Folder } from "lucide-react"
+import { Video, Mic, Activity, FileText, FileClock, History, MessageSquare, Clock, Calendar, Folder, Send, Edit2, CheckCircle } from "lucide-react"
 import api from "@/lib/api"
 import { toast } from "react-hot-toast"
+import { io } from "socket.io-client"
+import { useAuth } from "@/context/AuthContext"
 
 export default function DoctorChatSession() {
   const params = useParams()
   const router = useRouter()
   const chatId = params.id
+  const { user } = useAuth()
   
   const [chat, setChat] = useState(null)
   const [allChats, setAllChats] = useState([])
   const [messages, setMessages] = useState([])
   const [isLoading, setIsLoading] = useState(true)
+
+  // Report state
+  const [report, setReport] = useState(null)
+  const [isEditingReport, setIsEditingReport] = useState(false)
+  const [editedPrescription, setEditedPrescription] = useState('')
+  const [editedDoctorNote, setEditedDoctorNote] = useState('')
 
   // Fetch all chats for doctor list sidebar
   const fetchAllChats = async () => {
@@ -55,6 +64,27 @@ export default function DoctorChatSession() {
     }
   }, [chatId])
 
+  // Socket listener for instant consultationEnded notification
+  useEffect(() => {
+    const doctorId = user?._id || user?.id;
+    if (!doctorId) return;
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+    const socketUrl = apiBase.replace('/api', '');
+    const socket = io(socketUrl, { withCredentials: true, transports: ['websocket', 'polling'] });
+    socket.emit('joinRoom', `doctor_${doctorId}`);
+    socket.on('consultationEnded', (data) => {
+      if (data.chatId === chatId || data.chatId?.toString() === chatId) {
+        toast(`${data.patientName || 'Patient'} has ended the consultation`, { icon: '🔔' });
+        // Refresh the chat state
+        api.get(`/chats/${chatId}`).then(res => {
+          setChat(res.data.data);
+          fetchAllChats();
+        }).catch(() => {});
+      }
+    });
+    return () => socket.disconnect();
+  }, [chatId, user])
+
   // Polling for messages
   useEffect(() => {
     let interval;
@@ -78,6 +108,19 @@ export default function DoctorChatSession() {
     return () => clearInterval(interval)
   }, [chat, chatId])
 
+  // Fetch report when chat is ended
+  useEffect(() => {
+    if (chat?.status === 'ended') {
+      api.get(`/reports/chat/${chatId}`)
+        .then(res => {
+           setReport(res.data.data)
+           setEditedPrescription(res.data.data.prescription || '')
+           setEditedDoctorNote(res.data.data.summary || chat.aiReport?.doctorNote || '')
+        })
+        .catch(err => console.warn("Failed to fetch report for this chat (expected if report draft is still generating)", err))
+    }
+  }, [chat?.status, chatId])
+
   const handleSendMessage = async (content) => {
     try {
       const res = await api.post(`/chats/${chatId}/messages`, { content })
@@ -95,6 +138,19 @@ export default function DoctorChatSession() {
   const handleEndConsultation = async () => {
     try {
       await api.put(`/chats/${chatId}/end`)
+      
+      // Automatically reset status to available
+      try {
+        await api.patch('/auth/profile', { onlineStatus: 'available' })
+        const stored = JSON.parse(sessionStorage.getItem("user") || "{}")
+        const base = stored.user || stored
+        const updated = { ...base, onlineStatus: 'available' }
+        sessionStorage.setItem("user", JSON.stringify(updated))
+        window.dispatchEvent(new CustomEvent("profileUpdated"))
+      } catch (statusErr) {
+        console.error("Failed to update status to available:", statusErr)
+      }
+
       toast.success("Consultation ended and report drafted.")
       
       // Refresh current chat state and sidebar list
@@ -103,6 +159,47 @@ export default function DoctorChatSession() {
       fetchAllChats()
     } catch (err) {
       toast.error("Failed to end consultation")
+    }
+  }
+
+  const handleDeleteMessage = async (index) => {
+    try {
+      const res = await api.delete(`/chats/${chatId}/messages/${index}`)
+      const formatted = res.data.data.messages.map(m => ({
+        sender: m.senderModel === 'Doctor' ? 'user' : 'patient',
+        content: m.content,
+        timestamp: m.timestamp
+      }))
+      setMessages(formatted)
+      toast.success("Message deleted")
+    } catch (err) {
+      toast.error("Failed to delete message")
+    }
+  }
+
+  const handleSaveReport = async () => {
+    if (!report) return
+    try {
+      const res = await api.put(`/reports/${report._id}`, {
+        prescription: editedPrescription,
+        summary: editedDoctorNote
+      })
+      setReport(res.data.data)
+      setIsEditingReport(false)
+      toast.success("Report updated successfully")
+    } catch (err) {
+      toast.error("Failed to save report")
+    }
+  }
+
+  const handleSendToPatient = async () => {
+    if (!report) return
+    try {
+      const res = await api.put(`/reports/${report._id}/status`, { status: 'Sent to Patient' })
+      setReport(res.data.data)
+      toast.success("Report approved and sent to patient")
+    } catch (err) {
+      toast.error("Failed to send report")
     }
   }
 
@@ -227,6 +324,8 @@ export default function DoctorChatSession() {
           subtitle={`${chat.status === 'ended' ? 'Consultation Closed' : 'Online Consultation • Active'}`}
           messages={messages}
           onSendMessage={handleSendMessage}
+          onDeleteMessage={chat.status !== 'ended' ? handleDeleteMessage : undefined}
+          disabled={chat.status === 'ended'}
           headerRight={
             <div className="flex items-center gap-2">
               <Button variant="ghost" size="icon" className="text-slate-600">
@@ -275,62 +374,129 @@ export default function DoctorChatSession() {
             </CardContent>
           </Card>
         ) : (
-          <Card className="border-teal-200 bg-teal-50/30 shadow-sm flex-1 overflow-hidden flex flex-col min-h-0">
-            <h4 className="font-bold text-teal-900 text-sm flex items-center gap-2 shrink-0 px-4 pt-4 pb-1">
-              <FileText className="h-4 w-4 text-teal-600" /> AI Clinical Report
-            </h4>
-            
-            <div className="flex-1 min-h-0 overflow-y-auto space-y-3 px-4 py-3 pb-6">
-              {chat.aiReport ? (
-                <div className="space-y-3">
-                  <div className="p-3 bg-white rounded-xl border border-teal-50 shadow-sm space-y-1">
-                    <p className="text-[10px] font-bold text-teal-700 uppercase tracking-wider">Chief Complaint</p>
-                    <p className="text-xs font-medium text-slate-800">{chat.aiReport.complaint}</p>
-                  </div>
+          <Card className="border-slate-200 bg-white shadow-lg flex-1 overflow-hidden flex flex-col min-h-0 relative">
+            {/* Header */}
+            <div className="bg-slate-900 text-white px-4 py-3 shrink-0 flex justify-between items-center gap-2 overflow-hidden rounded-t-[inherit]">
+              <h4 className="font-bold text-base flex items-center gap-2 tracking-wide whitespace-nowrap truncate">
+                <FileText className="h-4 w-4 text-teal-400 shrink-0" /> <span className="truncate">Clinical Report</span>
+              </h4>
+              {report && (
+                <Badge className={`whitespace-nowrap shrink-0 ${report.status === 'Sent to Patient' ? 'bg-emerald-500 hover:bg-emerald-600 text-[10px] px-2 py-0.5' : 'bg-amber-500 hover:bg-amber-600 text-[10px] px-2 py-0.5'}`}>
+                  {report.status}
+                </Badge>
+              )}
+            </div>
 
-                  <div className="p-3 bg-white rounded-xl border border-teal-50 shadow-sm space-y-1">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Symptoms Mentioned</p>
-                    <p className="text-xs text-slate-700">{chat.aiReport.symptoms}</p>
-                  </div>
-
-                  <div className="p-3 bg-white rounded-xl border border-teal-50 shadow-sm space-y-1">
-                    <p className="text-[10px] font-bold text-teal-700 uppercase tracking-wider">Duration</p>
-                    <p className="text-xs font-medium text-slate-800">{chat.aiReport.duration}</p>
-                  </div>
-
-                  <div className="p-3 bg-white rounded-xl border border-teal-50 shadow-sm space-y-1">
-                    <p className="text-[10px] font-bold text-teal-700 uppercase tracking-wider">Severity</p>
-                    <p className="text-xs font-medium text-slate-800">{chat.aiReport.severity}</p>
-                  </div>
-
-                  <div className="p-3 bg-white rounded-xl border border-teal-50 shadow-sm space-y-1">
-                    <p className="text-[10px] font-bold text-teal-700 uppercase tracking-wider">Possible Condition</p>
-                    <p className="text-xs font-semibold text-teal-900 bg-teal-50 px-2 py-1 rounded border border-teal-100">{chat.aiReport.condition}</p>
-                  </div>
-
-                  <div className="p-3 bg-white rounded-xl border border-teal-50 shadow-sm space-y-1">
-                    <p className="text-[10px] font-bold text-teal-700 uppercase tracking-wider">Recommended Next Steps</p>
-                    <p className="text-xs text-slate-700 leading-relaxed">{chat.aiReport.nextSteps}</p>
-                  </div>
-
-                  <div className="p-3 bg-white rounded-xl border border-teal-50 shadow-sm space-y-1">
-                    <p className="text-[10px] font-bold text-teal-700 uppercase tracking-wider">Follow-Up Advice</p>
-                    <p className="text-xs text-slate-700 leading-relaxed">{chat.aiReport.followUp}</p>
-                  </div>
-
-                  <div className="p-3 bg-teal-900 text-white rounded-xl border border-transparent shadow-sm space-y-1">
-                    <p className="text-[10px] font-bold text-teal-200 uppercase tracking-wider">Clinical Summary</p>
-                    <p className="text-xs leading-relaxed italic">{chat.aiReport.doctorNote}</p>
-                  </div>
+            <div className="flex-1 min-h-0 overflow-y-auto px-6 sm:px-8 py-8">
+              {!report ? (
+                <div className="flex flex-col items-center justify-center h-48 text-center bg-slate-50 rounded-xl border border-dashed border-slate-200 p-4">
+                  <div className="h-8 w-8 animate-spin rounded-full border-2 border-teal-600 border-t-transparent mb-2"></div>
+                  <p className="text-xs text-slate-500 font-medium">Generating Report Document...</p>
                 </div>
               ) : (
-                <div className="flex flex-col items-center justify-center h-48 text-center bg-white rounded-xl border border-slate-100 p-4">
-                  <FileText className="h-8 w-8 text-slate-300 mb-2" />
-                  <p className="text-xs text-slate-500 font-medium">No AI Clinical Report generated yet.</p>
-                  <p className="text-[10px] text-slate-400 mt-1">Report will build dynamically upon ending active sessions with transcript history.</p>
+                <div className="space-y-6">
+                  {/* Document Header */}
+                  <div className="pb-8 flex flex-col items-center justify-center text-center border-b border-slate-100">
+                    <h2 className="text-[22px] font-medium text-slate-800 uppercase tracking-[0.15em] mb-2 leading-tight">Medical<br/>Prescription</h2>
+                    <p className="text-[10px] text-slate-400 uppercase tracking-[0.2em]">MediAI Digital Health Clinic</p>
+                  </div>
+                  
+                  {/* Patient Info */}
+                  <div className="flex flex-col mb-4">
+                    <div className="grid grid-cols-2 gap-6 py-6 border-b border-slate-100">
+                      <div className="flex flex-col gap-1.5">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Patient Name</p>
+                        <p className="text-sm font-medium text-slate-900">{chat.patient?.fullName || "Unknown Patient"}</p>
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Date</p>
+                        <p className="text-sm font-medium text-slate-900">{new Date(report.createdAt).toLocaleDateString()}</p>
+                      </div>
+                    </div>
+                    <div className="py-6 border-b border-slate-100 flex flex-col gap-1.5">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Doctor</p>
+                      <p className="text-sm font-medium text-slate-900">Dr. {user?.fullName || "Unknown Doctor"}</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-8">
+                    {/* Prescription Section */}
+                    <div className="pt-2">
+                      <h3 className="text-sm font-bold text-slate-900 uppercase mb-4 flex items-center gap-2">
+                        <span className="text-teal-600 font-serif text-3xl font-bold leading-none">Rx</span>
+                        <span className="translate-y-[2px]">Medicines & Directions</span>
+                      </h3>
+                      {isEditingReport ? (
+                        <textarea
+                          value={editedPrescription}
+                          onChange={(e) => setEditedPrescription(e.target.value)}
+                          className="w-full text-sm p-4 sm:p-5 border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-teal-500 focus:border-transparent min-h-[160px] resize-none leading-relaxed text-slate-700 shadow-sm"
+                          placeholder="List medicines and dosages here..."
+                        />
+                      ) : (
+                        <div className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed bg-slate-50/80 p-4 sm:p-5 rounded-xl border border-slate-100 shadow-[inset_0_1px_3px_rgba(0,0,0,0.02)] min-h-[120px]">
+                          {report.prescription || "No prescription added."}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Clinical Summary */}
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-900 uppercase mb-4 flex items-center gap-2">
+                        <FileText className="h-4 w-4 text-slate-400" /> <span className="translate-y-[1px]">Clinical Notes</span>
+                      </h3>
+                      {isEditingReport ? (
+                        <textarea
+                          value={editedDoctorNote}
+                          onChange={(e) => setEditedDoctorNote(e.target.value)}
+                          className="w-full text-sm p-4 sm:p-5 border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-teal-500 focus:border-transparent min-h-[120px] resize-none leading-relaxed text-slate-700 shadow-sm"
+                          placeholder="Clinical summary and advice..."
+                        />
+                      ) : (
+                        <div className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed bg-slate-50/80 p-4 sm:p-5 rounded-xl border border-slate-100 shadow-[inset_0_1px_3px_rgba(0,0,0,0.02)] min-h-[100px]">
+                          {report.summary || "No clinical notes added."}
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
+
+            {/* Footer Actions */}
+            {report && (
+              <div className="bg-slate-50 border-t border-slate-200 p-3 flex flex-col gap-2 shrink-0">
+                {report.status !== 'Sent to Patient' ? (
+                  <>
+                    {isEditingReport ? (
+                      <div className="flex gap-2">
+                        <Button variant="outline" className="flex-1 text-xs py-1 h-8" onClick={() => setIsEditingReport(false)}>
+                          Cancel
+                        </Button>
+                        <Button className="flex-1 text-xs py-1 h-8 bg-slate-900 hover:bg-slate-800 text-white gap-1" onClick={handleSaveReport}>
+                          <CheckCircle className="h-3.5 w-3.5" /> Save Changes
+                        </Button>
+                      </div>
+                    ) : (
+                      <Button variant="outline" className="w-full text-xs py-1 h-8 border-slate-300 gap-1 font-semibold" onClick={() => setIsEditingReport(true)}>
+                        <Edit2 className="h-3.5 w-3.5" /> Edit Report
+                      </Button>
+                    )}
+                    <Button 
+                      className="w-full text-xs py-1 h-8 bg-teal-600 hover:bg-teal-700 text-white gap-1 font-bold shadow-sm" 
+                      onClick={handleSendToPatient}
+                      disabled={isEditingReport}
+                    >
+                      <Send className="h-3.5 w-3.5" /> Send to Patient
+                    </Button>
+                  </>
+                ) : (
+                  <div className="flex items-center justify-center gap-2 text-sm font-semibold text-teal-600 py-4 w-full">
+                    <CheckCircle className="h-5 w-5" /> Finalized & Sent
+                  </div>
+                )}
+              </div>
+            )}
           </Card>
         )}
       </div>

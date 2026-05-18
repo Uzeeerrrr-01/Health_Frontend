@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/Button"
 import { Modal } from "@/components/ui/Modal"
 import { FileText, Download, Activity, CheckCircle2, AlertCircle, Clock, Eye, Calendar, User, Stethoscope } from "lucide-react"
 import api from "@/lib/api"
+import { jsPDF } from "jspdf"
 
 export default function HealthReports() {
   const [reports, setReports] = useState([])
@@ -42,115 +43,93 @@ export default function HealthReports() {
   }
 
   const handleDownloadPDF = (report) => {
-    const printWindow = window.open("", "_blank");
-    printWindow.document.write(`
-      <html>
-        <head>
-          <title>${report.title || 'Medical Report'}</title>
-          <style>
-            body {
-              font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-              color: #1e293b;
-              padding: 40px;
-              line-height: 1.6;
-            }
-            .header {
-              border-bottom: 2px solid #0f766e;
-              padding-bottom: 20px;
-              margin-bottom: 30px;
-            }
-            .title {
-              font-size: 28px;
-              font-weight: bold;
-              color: #0f766e;
-              margin: 0;
-            }
-            .subtitle {
-              font-size: 14px;
-              color: #64748b;
-              margin-top: 5px;
-            }
-            .meta-grid {
-              display: grid;
-              grid-template-columns: 1fr 1fr;
-              gap: 20px;
-              margin-bottom: 30px;
-              background: #f8fafc;
-              padding: 20px;
-              border-radius: 8px;
-              border: 1px solid #e2e8f0;
-            }
-            .meta-item span {
-              font-weight: bold;
-              color: #475569;
-            }
-            .section {
-              margin-bottom: 30px;
-            }
-            .section-title {
-              font-size: 18px;
-              font-weight: bold;
-              color: #0f766e;
-              border-left: 4px solid #0f766e;
-              padding-left: 10px;
-              margin-bottom: 15px;
-            }
-            .card {
-              background: #f8fafc;
-              border: 1px solid #e2e8f0;
-              padding: 20px;
-              border-radius: 8px;
-              white-space: pre-wrap;
-            }
-            .footer {
-              margin-top: 50px;
-              text-align: center;
-              font-size: 12px;
-              color: #94a3b8;
-              border-top: 1px solid #e2e8f0;
-              padding-top: 20px;
-            }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <div class="title">MediAI Healthcare - Clinical Report</div>
-            <div class="subtitle">Official Electronic Medical Record</div>
-          </div>
-          
-          <div class="meta-grid">
-            <div class="meta-item"><span>Report Title:</span> ${report.title || 'Consultation Report'}</div>
-            <div class="meta-item"><span>Date:</span> ${new Date(report.createdAt).toLocaleDateString()}</div>
-            <div class="meta-item"><span>Consulting Physician:</span> Dr. ${report.doctor?.fullName || 'N/A'}</div>
-            <div class="meta-item"><span>Specialization:</span> ${report.doctor?.specialization || 'General'}</div>
-          </div>
+    try {
+      const doc = new jsPDF();
+      
+      // Basic styling
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(22);
+      doc.setTextColor(15, 118, 110);
+      doc.text("MediAI Healthcare - Clinical Report", 14, 20);
+      
+      doc.setFontSize(12);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(100, 116, 139);
+      doc.text("Official Electronic Medical Record", 14, 28);
+      
+      doc.setLineWidth(0.5);
+      doc.setDrawColor(15, 118, 110);
+      doc.line(14, 32, 196, 32);
 
-          <div class="section">
-            <div class="section-title">Clinical Notes & Summary</div>
-            <div class="card">${report.summary || 'No summary available.'}</div>
-          </div>
+      // Meta info
+      doc.setFontSize(11);
+      doc.setTextColor(71, 85, 105);
+      doc.text(`Report Title: ${report.title || 'Consultation Report'}`, 14, 42);
+      doc.text(`Date: ${new Date(report.createdAt).toLocaleDateString()}`, 14, 48);
+      doc.text(`Consulting Physician: Dr. ${report.doctor?.fullName || 'N/A'}`, 14, 54);
+      doc.text(`Specialization: ${report.doctor?.specialization || 'General'}`, 14, 60);
 
-          ${report.prescription ? `
-          <div class="section">
-            <div class="section-title">Prescription & Medical Instructions</div>
-            <div class="card" style="border-color: #cbd5e1; background: #fafafa;">${report.prescription}</div>
-          </div>
-          ` : ''}
+      let yPos = 72;
+      
+      const addSection = (title, content) => {
+        if (!content) return;
+        
+        // Check page break for section title
+        if (yPos > 270) {
+          doc.addPage();
+          yPos = 20;
+        }
+        
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(14);
+        doc.setTextColor(15, 118, 110);
+        doc.text(title, 14, yPos);
+        yPos += 8;
+        
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(11);
+        doc.setTextColor(51, 65, 85);
+        
+        const lines = doc.splitTextToSize(content, 180);
+        
+        // Render lines with page break checking
+        for (let i = 0; i < lines.length; i++) {
+          if (yPos > 280) {
+            doc.addPage();
+            yPos = 20;
+          }
+          doc.text(lines[i], 14, yPos);
+          yPos += 6;
+        }
+        
+        yPos += 8; // Add space after section
+      }
 
-          <div class="footer">
-            This is a secure, system-generated medical report verified by MediAI Healthcare.
-          </div>
-          
-          <script>
-            window.onload = function() {
-              window.print();
-              setTimeout(function() { window.close(); }, 500);
-            };
-          </script>
-        </body>
-      </html>
-    `);
-    printWindow.document.close();
+      if (report.content || report.assessment || report.plan) {
+        if (report.content) addSection("Observations & Findings", report.content);
+        if (report.assessment) addSection("Clinical Assessment", report.assessment);
+        if (report.plan) addSection("Plan & Treatment", report.plan);
+      } else {
+        addSection("Clinical Notes & Summary", report.summary || 'No summary available.');
+      }
+
+      if (report.prescription) {
+        addSection("Prescription & Medical Instructions", report.prescription);
+      }
+      
+      // Footer on the last page
+      if (yPos > 280) {
+        doc.addPage();
+        yPos = 20;
+      }
+      doc.setFontSize(9);
+      doc.setTextColor(148, 163, 184);
+      doc.text("This is a secure, system-generated medical report verified by MediAI Healthcare.", 14, 290);
+
+      doc.save(`MediAI_Report_${report._id || 'download'}.pdf`);
+    } catch (error) {
+      console.error("Error generating PDF:", error);
+    }
   }
 
   return (
@@ -265,12 +244,41 @@ export default function HealthReports() {
               </div>
             </div>
 
-            <div className="space-y-2">
-              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">Clinical Summary & Diagnosis</h4>
-              <div className="p-4 bg-slate-50 border border-slate-150 rounded-xl text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
-                {selectedReport.summary || "No diagnostic summary compiled."}
+            {selectedReport.content || selectedReport.assessment || selectedReport.plan ? (
+              <>
+                {selectedReport.content && (
+                  <div className="space-y-2">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">Observations & Findings</h4>
+                    <div className="p-4 bg-slate-50 border border-slate-150 rounded-xl text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
+                      {selectedReport.content}
+                    </div>
+                  </div>
+                )}
+                {selectedReport.assessment && (
+                  <div className="space-y-2">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">Clinical Assessment</h4>
+                    <div className="p-4 bg-slate-50 border border-slate-150 rounded-xl text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
+                      {selectedReport.assessment}
+                    </div>
+                  </div>
+                )}
+                {selectedReport.plan && (
+                  <div className="space-y-2">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">Plan & Treatment</h4>
+                    <div className="p-4 bg-slate-50 border border-slate-150 rounded-xl text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
+                      {selectedReport.plan}
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="space-y-2">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">Clinical Summary & Diagnosis</h4>
+                <div className="p-4 bg-slate-50 border border-slate-150 rounded-xl text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
+                  {selectedReport.summary || "No diagnostic summary compiled."}
+                </div>
               </div>
-            </div>
+            )}
 
             {selectedReport.prescription && (
               <div className="space-y-2">

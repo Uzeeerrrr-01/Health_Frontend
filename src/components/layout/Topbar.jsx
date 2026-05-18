@@ -5,16 +5,18 @@ import { Bell, Search, User, LogOut, Check, CheckCheck, Clock } from "lucide-rea
 import { Input } from "@/components/ui/Input"
 import { Button } from "@/components/ui/Button"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useRouter, usePathname } from "next/navigation"
 import api from "@/lib/api"
 import { useAuth } from "@/context/AuthContext"
 
 export function Topbar({ role: propsRole }) {
   const router = useRouter()
+  const pathname = usePathname()
   const { user, role, logout } = useAuth()
   const [notifications, setNotifications] = useState([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [showNotifications, setShowNotifications] = useState(false)
+  const [showBreakModal, setShowBreakModal] = useState(false)
   const notificationRef = useRef(null)
 
   useEffect(() => {
@@ -58,6 +60,30 @@ export function Topbar({ role: propsRole }) {
       }
     } catch (err) {
       console.error("Failed to mark as read")
+    }
+  }
+
+  const handleSetBreak = async (duration) => {
+    try {
+      const res = await api.patch('/auth/profile', { 
+        onlineStatus: 'break',
+        breakDuration: duration 
+      })
+      if (res.data.success) {
+        const stored = JSON.parse(sessionStorage.getItem("user") || "{}")
+        const base = stored.user || stored
+        const updated = { 
+          ...base, 
+          onlineStatus: 'break',
+          breakExpiresAt: res.data.data.breakExpiresAt
+        }
+        sessionStorage.setItem("user", JSON.stringify(updated))
+        window.dispatchEvent(new CustomEvent("profileUpdated"))
+      }
+    } catch (err) {
+      console.error("Failed to set break:", err)
+    } finally {
+      setShowBreakModal(false)
     }
   }
 
@@ -173,6 +199,38 @@ export function Topbar({ role: propsRole }) {
         <div className="h-8 w-px bg-slate-200 mx-2 hidden sm:block" />
 
         <div className="flex items-center gap-3">
+          {role === 'doctor' && (
+            <div className="mr-2">
+              <div
+                className="text-xs font-bold rounded-full px-3 py-1.5 border select-none transition-all duration-300"
+                style={{
+                  color: (user?.onlineStatus === 'available' || !user?.onlineStatus || (user?.onlineStatus === 'busy' && !pathname.includes('/doctor/chat/'))) ? '#10b981' : user?.onlineStatus === 'busy' ? '#ef4444' : '#f97316',
+                  borderColor: (user?.onlineStatus === 'available' || !user?.onlineStatus || (user?.onlineStatus === 'busy' && !pathname.includes('/doctor/chat/'))) ? '#a7f3d0' : user?.onlineStatus === 'busy' ? '#fecaca' : '#fed7aa',
+                  backgroundColor: (user?.onlineStatus === 'available' || !user?.onlineStatus || (user?.onlineStatus === 'busy' && !pathname.includes('/doctor/chat/'))) ? '#ecfdf5' : user?.onlineStatus === 'busy' ? '#fef2f2' : '#fff7ed'
+                }}
+              >
+                {(() => {
+                  const formatTime12 = (t) => {
+                    if (!t) return '';
+                    const [h, m] = t.split(':');
+                    const hours = parseInt(h, 10);
+                    const ampm = hours >= 12 ? 'PM' : 'AM';
+                    const formattedHours = (hours % 12 || 12).toString().padStart(2, '0');
+                    return `${formattedHours}:${m} ${ampm}`;
+                  };
+                  return user?.onlineStatus === 'busy' 
+                    ? (pathname.includes('/doctor/chat/') ? '🔴 Busy (In Chat)' : '🟢 Active')
+                    : user?.onlineStatus === 'break'
+                      ? user?.breakExpiresAt 
+                        ? `🟠 On Break (until ${new Date(user.breakExpiresAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})})` 
+                        : user?.dailyBreak?.enabled 
+                          ? `🟠 Scheduled Break (${formatTime12(user.dailyBreak.startTime)} - ${formatTime12(user.dailyBreak.endTime)})` 
+                          : '🟠 On Break'
+                      : '🟢 Active';
+                })()}
+              </div>
+            </div>
+          )}
           <div className="text-right hidden sm:block">
             <p className="text-sm font-medium text-slate-900 leading-none">{user?.fullName || user?.name || "User"}</p>
             <p className="text-xs text-slate-500 mt-1 capitalize">{role}</p>
@@ -197,6 +255,54 @@ export function Topbar({ role: propsRole }) {
           </button>
         </div>
       </div>
+
+      {/* Break Duration Modal */}
+      {showBreakModal && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl border border-slate-100 flex flex-col gap-6 transform scale-100 transition-all duration-300">
+            <div className="text-center space-y-2">
+              <div className="h-12 w-12 mx-auto rounded-2xl bg-orange-50 flex items-center justify-center text-orange-500 mb-2">
+                <Clock className="h-6 w-6 animate-pulse" />
+              </div>
+              <h3 className="text-xl font-bold text-slate-800">Set Break Duration</h3>
+              <p className="text-sm text-slate-500">How long will you be away? Your status will automatically reset to Available after the break ends.</p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                { label: '15 Mins', value: '15' },
+                { label: '30 Mins', value: '30' },
+                { label: '1 Hour', value: '60' },
+                { label: '2 Hours', value: '120' }
+              ].map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => handleSetBreak(opt.value)}
+                  className="py-3 px-4 rounded-xl border border-slate-200 hover:border-orange-500 hover:bg-orange-50/30 text-slate-700 font-semibold text-sm transition-all duration-200"
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+
+            <button
+              onClick={() => handleSetBreak('indefinite')}
+              className="py-3 px-4 rounded-xl border border-dashed border-slate-300 hover:border-slate-400 hover:bg-slate-50 text-slate-600 font-semibold text-sm transition-all duration-200 animate-pulse"
+            >
+              Indefinite (Until manually changed)
+            </button>
+
+            <div className="flex gap-3 justify-end border-t pt-4">
+              <button
+                onClick={() => setShowBreakModal(false)}
+                className="px-4 py-2 text-sm font-semibold text-slate-500 hover:text-slate-700 hover:bg-slate-50 rounded-lg transition-all duration-200"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </header>
   )
 }

@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/Card"
 import { Badge } from "@/components/ui/Badge"
 import { Button } from "@/components/ui/Button"
-import { FileText, CheckCircle2, XCircle, PenTool, AlertCircle, Clock } from "lucide-react"
+import { FileText, CheckCircle2, XCircle, PenTool, AlertCircle, Clock, Trash2 } from "lucide-react"
 import api from "@/lib/api"
 import { toast } from "react-hot-toast"
 
@@ -17,7 +17,8 @@ export default function ReportVerification() {
     title: "",
     content: "",
     assessment: "",
-    plan: ""
+    plan: "",
+    prescription: ""
   })
 
   useEffect(() => {
@@ -48,22 +49,62 @@ export default function ReportVerification() {
       title: report.title || "",
       content: report.content || "",
       assessment: report.assessment || "",
-      plan: report.plan || ""
+      plan: report.plan || "",
+      prescription: report.prescription || ""
     })
   }
 
-  const handleAction = async (status) => {
+  const handleDeleteReport = async (reportId, e) => {
+    e.stopPropagation()
+    if (!confirm("Are you sure you want to delete this report draft?")) return
+    try {
+      const res = await api.delete(`/reports/${reportId}`)
+      if (res.data.success) {
+        toast.success("Report draft deleted successfully")
+        const updatedReports = reports.filter(r => r._id !== reportId)
+        setReports(updatedReports)
+        if (selectedReport?._id === reportId) {
+          if (updatedReports.length > 0) {
+            handleSelectReport(updatedReports[0])
+          } else {
+            setSelectedReport(null)
+            setFormData({
+              title: "",
+              content: "",
+              assessment: "",
+              plan: "",
+              prescription: ""
+            })
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Failed to delete report:", err)
+      toast.error("Failed to delete report draft")
+    }
+  }
+
+  const handleAction = async (actionType) => {
     if (!selectedReport) return
     
     try {
       setIsSubmitting(true)
-      const res = await api.put(`/reports/${selectedReport._id}`, {
+      // 1. Sync and save the fields to the database first
+      const summaryText = formData.assessment 
+        ? `${formData.assessment}\n\n${formData.content}` 
+        : formData.content || "Clinical Consultation Notes";
+
+      await api.put(`/reports/${selectedReport._id}`, {
         ...formData,
-        status: status === 'approve' ? 'Approved' : 'Rejected'
+        summary: summaryText
       })
       
+      // 2. Perform the status update using /status endpoint so it actually publishes to the patient
+      const statusToSet = actionType === 'approve' ? 'Sent to Patient' : 'Draft by AI';
+      const res = await api.put(`/reports/${selectedReport._id}/status`, { status: statusToSet })
+      
       if (res.data.success) {
-        toast.success(`Report ${status === 'approve' ? 'approved' : 'rejected'} successfully`)
+        toast.success(`Report ${actionType === 'approve' ? 'approved & sent to patient' : 'returned to draft'} successfully`)
         const updatedReports = reports.filter(r => r._id !== selectedReport._id)
         setReports(updatedReports)
         if (updatedReports.length > 0) {
@@ -111,14 +152,23 @@ export default function ReportVerification() {
               <div 
                 key={report._id}
                 onClick={() => handleSelectReport(report)}
-                className={`p-4 rounded-xl cursor-pointer transition-all border-2 relative overflow-hidden ${
+                className={`group p-4 rounded-xl cursor-pointer transition-all border-2 relative overflow-hidden ${
                   selectedReport?._id === report._id 
                   ? 'bg-white border-teal-600 shadow-md' 
                   : 'bg-slate-50 border-slate-200 hover:border-slate-300'
                 }`}
               >
                 {selectedReport?._id === report._id && <div className="absolute top-0 left-0 w-1 h-full bg-teal-600"></div>}
-                <h3 className="font-semibold text-slate-900 mb-1">{report.patient?.fullName || "Unknown Patient"}</h3>
+                
+                <button 
+                  onClick={(e) => handleDeleteReport(report._id, e)}
+                  className="absolute top-3 right-3 h-7 w-7 rounded-full bg-red-50 text-red-500 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-100 z-10"
+                  title="Delete Draft"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+
+                <h3 className="font-semibold text-slate-900 mb-1 pr-8">{report.patient?.fullName || "Unknown Patient"}</h3>
                 <p className="text-xs font-medium text-slate-500 mb-3">Created: {new Date(report.createdAt).toLocaleDateString()}</p>
                 <div className="flex items-center justify-between">
                   <Badge variant="outline" className="text-[10px]">{report.reportType || "Clinical Note"}</Badge>
@@ -187,6 +237,16 @@ export default function ReportVerification() {
                       onChange={(e) => setFormData({...formData, plan: e.target.value})}
                     />
                   </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Prescribed Medicines & Nearby Medical Shops</label>
+                  <textarea 
+                    className="w-full p-3 rounded-md border border-slate-200 text-sm focus:ring-2 focus:ring-teal-600 outline-none h-28 text-slate-800 font-medium"
+                    placeholder="List required medicines, dosages, and nearby shops where they can buy them..."
+                    value={formData.prescription}
+                    onChange={(e) => setFormData({...formData, prescription: e.target.value})}
+                  />
                 </div>
 
                 <div className="pt-4 border-t border-slate-100">

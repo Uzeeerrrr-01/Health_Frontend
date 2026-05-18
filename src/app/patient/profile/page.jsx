@@ -239,13 +239,7 @@ export default function ProfileSettings() {
                 <InfoRow icon={MapPin} label="Address" value={form.address} />
               </div>
 
-              <Button
-                onClick={() => setIsEditing(true)}
-                className="w-full mt-8 bg-teal-600 hover:bg-teal-700 text-white shadow-sm"
-              >
-                <Edit3 className="mr-2 h-4 w-4" /> Edit Profile
-              </Button>
-              <Link href="/patient/profile/security" className="block w-full mt-2">
+              <Link href="/patient/profile/security" className="block w-full mt-8">
                 <Button variant="outline" className="w-full border-slate-200 text-slate-600 hover:bg-slate-50">
                   <Shield className="mr-2 h-4 w-4" /> Security Settings
                 </Button>

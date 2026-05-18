@@ -234,13 +234,7 @@ export default function DoctorSettings() {
                 <InfoRow icon={MapPin} label="Clinic Address" value={form.clinicAddress} />
               </div>
 
-              <Button
-                onClick={() => setIsEditing(true)}
-                className="w-full mt-8 bg-teal-600 hover:bg-teal-700 text-white shadow-sm font-medium"
-              >
-                <Edit3 className="mr-2 h-4 w-4" /> Edit Profile
-              </Button>
-              <Link href="/doctor/settings/security" className="block w-full mt-2">
+              <Link href="/doctor/settings/security" className="block w-full mt-8">
                 <Button variant="outline" className="w-full border-slate-200 text-slate-600 hover:bg-slate-50 font-medium">
                   <Shield className="mr-2 h-4 w-4" /> Security Settings
                 </Button>

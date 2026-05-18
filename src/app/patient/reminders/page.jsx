@@ -5,12 +5,13 @@ import { Card, CardContent } from "@/components/ui/Card"
 import { Button } from "@/components/ui/Button"
 import { Input, Label } from "@/components/ui/Input"
 import { Modal } from "@/components/ui/Modal"
-import { Bell, Plus, Check, X, Clock, Settings2, Moon, Sun, Sunrise, Trash2 } from "lucide-react"
+import { Bell, Plus, Check, X, Clock, Settings2, Moon, Sun, Sunrise, Trash2, Edit2 } from "lucide-react"
 import api from "@/lib/api"
 import { toast } from "react-hot-toast"
 
 export default function MedicineReminders() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
+  const [editingId, setEditingId] = useState(null)
   const [reminders, setReminders] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   
@@ -35,24 +36,103 @@ export default function MedicineReminders() {
     }
   }
 
+  const [triggeredAlarms, setTriggeredAlarms] = useState(new Set())
+
   useEffect(() => {
     fetchReminders()
     const interval = setInterval(fetchReminders, 30000) // Poll every 30s
     return () => clearInterval(interval)
   }, [])
 
-  const handleAddReminder = async (e) => {
+  // Alarm checking effect
+  useEffect(() => {
+    if (!reminders || reminders.length === 0) return;
+
+    const checkAlarms = () => {
+      const now = new Date();
+      const currentHours = now.getHours().toString().padStart(2, '0');
+      const currentMinutes = now.getMinutes().toString().padStart(2, '0');
+      const currentTime = `${currentHours}:${currentMinutes}`;
+
+      reminders.forEach(reminder => {
+        if (reminder.status === 'pending' && reminder.time === currentTime) {
+          const alarmKey = `${reminder._id}-${currentTime}`;
+          if (!triggeredAlarms.has(alarmKey)) {
+            // Mark as triggered in state so it doesn't loop
+            setTriggeredAlarms(prev => {
+              const next = new Set(prev);
+              next.add(alarmKey);
+              return next;
+            });
+            
+            // Visual toast
+            toast(`Time to take your medicine: ${reminder.medicineName}`, {
+              duration: 10000,
+              icon: '🔔',
+              style: {
+                border: '1px solid #0d9488',
+                padding: '16px',
+                color: '#0f766e',
+                fontWeight: 'bold'
+              },
+            });
+
+            // Voice alarm
+            if ('speechSynthesis' in window) {
+              // Cancel any ongoing speech before starting a new one
+              window.speechSynthesis.cancel();
+              const utterance = new SpeechSynthesisUtterance(
+                `Reminder! It is time to take your medicine: ${reminder.medicineName}. ${reminder.instructions ? reminder.instructions : ''}`
+              );
+              utterance.rate = 0.9; // Slightly slower for clarity
+              window.speechSynthesis.speak(utterance);
+            }
+          }
+        }
+      });
+    };
+
+    const interval = setInterval(checkAlarms, 5000); // Check every 5 seconds
+    checkAlarms(); // Run once immediately
+
+    return () => clearInterval(interval);
+  }, [reminders, triggeredAlarms]);
+
+  const handleSaveReminder = async (e) => {
     e.preventDefault()
     try {
-      await api.post('/medicines', formData)
-      toast.success("Reminder added")
+      if (editingId) {
+        await api.put(`/medicines/${editingId}`, formData)
+        toast.success("Reminder updated")
+      } else {
+        await api.post('/medicines', formData)
+        toast.success("Reminder added")
+      }
       fetchReminders()
       setIsAddModalOpen(false)
+      setEditingId(null)
       setFormData({ medicineName: "", time: "", period: "Morning", instructions: "" })
     } catch (err) {
-      console.error("Failed to add reminder:", err)
-      toast.error("Failed to add reminder")
+      console.error("Failed to save reminder:", err)
+      toast.error("Failed to save reminder")
     }
+  }
+
+  const openEditModal = (reminder) => {
+    setEditingId(reminder._id)
+    setFormData({
+      medicineName: reminder.medicineName,
+      time: reminder.time,
+      period: reminder.period,
+      instructions: reminder.instructions || ""
+    })
+    setIsAddModalOpen(true)
+  }
+
+  const handleCloseModal = () => {
+    setIsAddModalOpen(false)
+    setEditingId(null)
+    setFormData({ medicineName: "", time: "", period: "Morning", instructions: "" })
   }
 
   const handleDeleteReminder = async (id) => {
@@ -101,7 +181,11 @@ export default function MedicineReminders() {
           <Button variant="outline" size="icon">
             <Settings2 className="h-5 w-5 text-slate-600" />
           </Button>
-          <Button className="gap-2" onClick={() => setIsAddModalOpen(true)}>
+          <Button className="gap-2" onClick={() => {
+            setEditingId(null)
+            setFormData({ medicineName: "", time: "", period: "Morning", instructions: "" })
+            setIsAddModalOpen(true)
+          }}>
             <Plus className="h-4 w-4" /> Add Reminder
           </Button>
         </div>
@@ -189,7 +273,10 @@ export default function MedicineReminders() {
                               </Button>
                             </>
                           )}
-                          <Button variant="ghost" size="icon" onClick={() => handleDeleteReminder(reminder._id)} className="opacity-0 group-hover:opacity-100 transition-opacity ml-2" title="Delete">
+                          <Button variant="ghost" size="icon" onClick={() => openEditModal(reminder)} className="ml-2" title="Edit">
+                            <Edit2 className="h-4 w-4 text-slate-500" />
+                          </Button>
+                          <Button variant="ghost" size="icon" onClick={() => handleDeleteReminder(reminder._id)} title="Delete">
                             <Trash2 className="h-4 w-4 text-red-500" />
                           </Button>
                         </div>
@@ -203,8 +290,8 @@ export default function MedicineReminders() {
         )}
       </div>
 
-      <Modal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} title="Add Medicine Reminder">
-        <form onSubmit={handleAddReminder} className="space-y-4">
+      <Modal isOpen={isAddModalOpen} onClose={handleCloseModal} title={editingId ? "Edit Medicine Reminder" : "Add Medicine Reminder"}>
+        <form onSubmit={handleSaveReminder} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="medName">Medicine Name</Label>
             <Input 
@@ -230,7 +317,7 @@ export default function MedicineReminders() {
               <Label htmlFor="period">Period</Label>
               <select 
                 id="period" 
-                className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600"
+                className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600"
                 value={formData.period}
                 onChange={(e) => setFormData({...formData, period: e.target.value})}
               >
@@ -250,8 +337,8 @@ export default function MedicineReminders() {
             />
           </div>
           <div className="pt-4 flex justify-end gap-2 border-t border-slate-100">
-            <Button type="button" variant="outline" onClick={() => setIsAddModalOpen(false)}>Cancel</Button>
-            <Button type="submit">Save Reminder</Button>
+            <Button type="button" variant="outline" onClick={handleCloseModal}>Cancel</Button>
+            <Button type="submit">{editingId ? "Update Reminder" : "Save Reminder"}</Button>
           </div>
         </form>
       </Modal>

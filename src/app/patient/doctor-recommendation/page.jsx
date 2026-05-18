@@ -103,7 +103,37 @@ export default function DoctorRecommendation() {
                           <Stethoscope className="h-4 w-4" /> {doctor.specialization}
                         </p>
                       </div>
-                      <Badge variant="success" className="bg-emerald-100 text-emerald-700 border-emerald-200">Verified</Badge>
+                      <div className="flex flex-col items-end gap-1.5">
+                        <Badge 
+                          className="font-extrabold text-[9px] uppercase px-2 py-0.5 border shadow-sm"
+                          style={{
+                            color: (doctor.onlineStatus === 'available' || !doctor.onlineStatus) ? '#10b981' : doctor.onlineStatus === 'busy' ? '#ef4444' : '#f97316',
+                            borderColor: (doctor.onlineStatus === 'available' || !doctor.onlineStatus) ? '#a7f3d0' : doctor.onlineStatus === 'busy' ? '#fecaca' : '#fed7aa',
+                            backgroundColor: (doctor.onlineStatus === 'available' || !doctor.onlineStatus) ? '#ecfdf5' : doctor.onlineStatus === 'busy' ? '#fef2f2' : '#fff7ed'
+                          }}
+                        >
+                          {(() => {
+                            const formatTime12 = (t) => {
+                              if (!t) return '';
+                              const [h, m] = t.split(':');
+                              const hours = parseInt(h, 10);
+                              const ampm = hours >= 12 ? 'PM' : 'AM';
+                              const formattedHours = (hours % 12 || 12).toString().padStart(2, '0');
+                              return `${formattedHours}:${m} ${ampm}`;
+                            };
+                            return (doctor.onlineStatus === 'available' || !doctor.onlineStatus) 
+                              ? '🟢 Available' 
+                              : doctor.onlineStatus === 'busy' 
+                                ? '🔴 Busy' 
+                                : doctor.breakExpiresAt 
+                                  ? `🟠 On Break (until ${new Date(doctor.breakExpiresAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})})` 
+                                  : doctor.dailyBreak?.enabled
+                                    ? `🟠 Scheduled Break (${formatTime12(doctor.dailyBreak.startTime)} - ${formatTime12(doctor.dailyBreak.endTime)})`
+                                    : '🟠 On Break';
+                          })()}
+                        </Badge>
+                        <Badge variant="success" className="bg-emerald-100 text-emerald-700 border-emerald-200">Verified</Badge>
+                      </div>
                     </div>
                     
                     <div className="flex flex-wrap gap-y-2 gap-x-6 text-sm text-slate-600 mt-4">
